@@ -36,6 +36,29 @@ const App = {
     modal.show();
   },
 
+  openMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.add('show');
+    if (overlay) overlay.classList.add('show');
+  },
+
+  closeMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.remove('show');
+    if (overlay) overlay.classList.remove('show');
+  },
+
+  toggleMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.classList.contains('show')) {
+      this.closeMobileMenu();
+    } else {
+      this.openMobileMenu();
+    }
+  },
+
   bindEvents() {
     // Navigation link clicks
     document.querySelectorAll('.nav-link-custom').forEach(link => {
@@ -43,11 +66,17 @@ const App = {
         e.preventDefault();
         const targetView = link.getAttribute('data-view');
         if (targetView) this.switchView(targetView);
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebarOverlay');
-        if (sidebar) sidebar.classList.remove('show');
-        if (overlay) overlay.classList.remove('show');
+        this.closeMobileMenu();
       });
+    });
+
+    // Close mobile menu on ESC or window resize
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.closeMobileMenu();
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth >= 992) this.closeMobileMenu();
     });
 
     // Login Form Submit

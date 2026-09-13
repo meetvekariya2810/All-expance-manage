@@ -23,7 +23,7 @@
 
   <div id="app-layout">
     <!-- Mobile Sidebar Backdrop Overlay -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="document.getElementById('sidebar').classList.remove('show'); this.classList.remove('show');"></div>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="App.closeMobileMenu()"></div>
 
     <!-- Sidebar Navigation -->
     <aside class="app-sidebar" id="sidebar">
@@ -82,9 +82,9 @@
       <!-- Top Sticky Header -->
       <header class="app-header">
         <div class="d-flex align-items-center gap-3">
-          <span class="mobile-nav-toggle" onclick="document.getElementById('sidebar').classList.toggle('show'); document.getElementById('sidebarOverlay').classList.toggle('show');">
+          <button class="mobile-nav-toggle" aria-label="Open navigation menu" onclick="App.toggleMobileMenu()">
             <i class="fa-solid fa-bars"></i>
-          </span>
+          </button>
           <div class="header-search">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input type="text" id="filterSearch" placeholder="Search expenses, vendors, notes...">
@@ -192,7 +192,7 @@
               <div class="chart-card-header">
                 <h5>Expense Category Distribution</h5>
               </div>
-              <div style="height: 280px;">
+              <div class="chart-container">
                 <canvas id="categoryChartCanvas"></canvas>
               </div>
             </div>
@@ -201,7 +201,7 @@
               <div class="chart-card-header">
                 <h5>Monthly Spending Trend</h5>
               </div>
-              <div style="height: 280px;">
+              <div class="chart-container">
                 <canvas id="monthlyTrendCanvas"></canvas>
               </div>
             </div>
@@ -210,7 +210,7 @@
               <div class="chart-card-header">
                 <h5>User Expense Comparison</h5>
               </div>
-              <div style="height: 260px;">
+              <div class="chart-container">
                 <canvas id="userComparisonCanvas"></canvas>
               </div>
             </div>
