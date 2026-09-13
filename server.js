@@ -32,10 +32,6 @@ app.use('/api', async (req, res, next) => {
   next();
 });
 
-// Serve static frontend files and uploads
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
-
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -54,11 +50,17 @@ app.use('/api/budgets', budgetRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
 
-// Fallback route for SPA (ensure API 404s don't return HTML)
+// Catch-all for undefined /api routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ success: false, message: 'API route not found' });
+});
+
+// Serve static frontend files and uploads
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
+// Fallback route for SPA
 app.get('*', (req, res) => {
-  if (req.path.startsWith('/api')) {
-    return res.status(404).json({ success: false, message: 'API route not found' });
-  }
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
