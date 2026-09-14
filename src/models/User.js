@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
+  _id: { type: String },
+  id: { type: String },
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   mobile: { type: String, default: '' },
@@ -11,7 +13,8 @@ const userSchema = new mongoose.Schema({
   profile_image: { type: String, default: '/uploads/default-avatar.png' },
   status: { type: String, enum: ['active', 'disabled'], default: 'active' },
   created_at: { type: Date, default: Date.now }
-});
+}, { _id: false, id: false });
+
 
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();

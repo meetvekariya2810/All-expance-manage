@@ -1,167 +1,154 @@
-# 💰 Smart Personal Expense Management System
+# 💰 Smart Personal Expense Management System (MERN Stack + MongoDB)
 
-A modern, responsive, secure full-stack web application designed for managing daily personal and shared expenses between two primary users (Admin & Second Person User) with role-based permissions, interactive analytics, budget monitoring, receipt uploads, and multi-format exports (PDF, Excel, CSV).
-
----
-
-## 🌟 Key Features
-
-### 👤 Role-Based Access Control (RBAC)
-1. **Main Person (Admin)**:
-   * Full access to all transactions across all users.
-   * Add, edit, and delete any expense record.
-   * Manage users (Add user, Enable/Disable account, Reset password).
-   * Manage custom categories & global monthly budget.
-   * View combined reports, analytics, and export metrics.
-2. **Second Person (User - Bhavik Bhai)**:
-   * Private account access.
-   * View, add, edit, and delete **only their own** expense records.
-   * View personal spending dashboard, category pie chart, and budget tracking.
-   * Restricted from admin settings and user management.
+A modern, responsive, enterprise-grade full-stack **MERN** web application designed for managing daily personal and multi-user family expenses (**Admin: Bhavik Bhai**, **Users: Meet & Harsh**) with role-based access control (RBAC), interactive Chart.js analytics, monthly budget tracking, receipt attachment uploads, and multi-format reports (PDF, Excel, CSV).
 
 ---
 
-## 🎨 UI & Aesthetics
-* **Glassmorphism Design**: High-contrast, clean visual design with subtle backdrop blurs, soft card shadows, and vibrant accent colors.
-* **Dark / Light Mode**: Instant client-side toggle for dark mode preference.
-* **Interactive Charts**: Powered by Chart.js (Doughnut category distribution, Monthly spending line trend, and side-by-side user comparison bar chart).
-* **Mobile Responsive**: Off-canvas sidebar drawer for seamless phone, tablet, and desktop viewports.
+## 🏗️ Architecture & Technology Stack
+
+| Layer | Technology | Description |
+| :--- | :--- | :--- |
+| **Frontend** | **React 18 + Vite** | High-performance SPA with React Router, Context API, and modern reusable components |
+| **Styling** | **Glassmorphism Design System** | Custom CSS3 glassmorphism, responsive navigation drawer, and seamless Dark/Light mode |
+| **Charts** | **Chart.js + react-chartjs-2** | Category Doughnut, Monthly Spending Trend, Payment Breakdown, Daily Flow, and User Comparison |
+| **Backend** | **Node.js + Express.js** | RESTful API architecture, JWT authentication, bcrypt password hashing, and Multer uploads |
+| **Database** | **MongoDB + Mongoose** | **Authoritative primary database** with schema validation, indexing, and aggregation pipelines |
+| **Reports** | **PDFKit & ExcelJS** | Server-side streamed PDF statements, formatted Excel `.xlsx` spreadsheets, and CSV exports |
 
 ---
 
-## 🛠️ Tech Stack
-
-* **Frontend**: HTML5, Custom CSS3 Glassmorphism System, Bootstrap 5, JavaScript (ES6+), Chart.js.
-* **Backend**: Node.js, Express.js (REST API, JWT Authentication, Multer file upload handling).
-* **Database**: MongoDB with Mongoose ODM + automatic fallback to embedded JSON data store (`data_store.json`) for seamless zero-setup offline execution.
-* **Exports**: PDFKit (PDF statement generation) & ExcelJS (Excel `.xlsx` spreadsheet exports).
-
----
-
-## 📁 Project Folder Structure
+## 📁 Clean MERN Project Structure
 
 ```text
-bhavik bhai expance/
-├── .env                       # Environment configuration
-├── .env.example               # Template for environment variables
-├── package.json               # Dependencies and scripts
-├── server.js                  # Express application entry point
-├── data_store.json            # Local JSON fallback store (auto-generated)
-├── src/
+bhavik-bhai-expance/
+├── client/                     # React + Vite Frontend Application
+│   ├── src/
+│   │   ├── components/         # Reusable React components (Charts, Modals, StatCards, Header, Sidebar)
+│   │   ├── context/            # Global state providers (AuthContext, ThemeContext, ToastContext)
+│   │   ├── layouts/            # Layout wrappers (AppLayout with responsive sidebar & budget banner)
+│   │   ├── pages/              # View pages (Dashboard, Expenses, Entry Form, Reports, Budget, Categories, Users)
+│   │   ├── routes/             # Client routing & AdminRoute role protection
+│   │   ├── services/           # Axios API services (auth, expenses, categories, budgets, reports, users)
+│   │   ├── utils/              # Formatting helpers, constants, and payment methods
+│   │   ├── App.jsx             # Root React application
+│   │   ├── main.jsx            # React entry point
+│   │   └── index.css           # Glassmorphism design system & theme variables
+│   ├── package.json
+│   └── vite.config.js          # Vite config with dev proxy to backend (/api -> :5000)
+│
+├── server/                     # Node.js + Express REST API Backend
 │   ├── config/
-│   │   └── db.js              # Database connector & fallback handler
-│   ├── controllers/
-│   │   ├── authController.js  # Auth & login logic
-│   │   ├── budgetController.js# Budget management
-│   │   ├── categoryController.js# Category management
-│   │   ├── expenseController.js # Expense CRUD & bulk deletion
-│   │   ├── reportController.js # Analytics & PDF/Excel export
-│   │   └── userController.js   # Admin user management
-│   ├── middleware/
-│   │   ├── auth.js            # JWT token & role verification
-│   │   └── upload.js          # Multer receipt file upload engine
-│   ├── models/
-│   │   ├── ActivityLog.js     # User activity logs schema
-│   │   ├── Budget.js          # Monthly budget schema
-│   │   ├── Category.js        # Expense category schema
-│   │   ├── Expense.js         # Main expense record schema
-│   │   └── User.js            # User account & credentials schema
-│   ├── routes/
-│   │   ├── authRoutes.js
-│   │   ├── budgetRoutes.js
-│   │   ├── categoryRoutes.js
-│   │   ├── expenseRoutes.js
-│   │   ├── reportRoutes.js
-│   │   └── userRoutes.js
-│   └── utils/
-│       └── seedData.js        # Initial seeding script
-└── public/
-    ├── css/
-    │   └── style.css          # Glassmorphic design system styles
-    ├── js/
-    │   ├── app.js             # Main SPA controller & event handlers
-    │   ├── auth.js            # JWT session manager & role gating
-    │   ├── charts.js          # Chart.js visualization logic
-    │   └── export.js          # PDF/Excel/CSV client export helpers
-    ├── uploads/
-    │   └── receipts/          # Uploaded expense invoice receipts
-    └── index.html             # Application single page layout
+│   │   └── db.js               # Authoritative MongoDB connection & zero-config embedded Mongo fallback
+│   ├── controllers/            # Controller business logic (auth, expenses, budgets, categories, reports, users)
+│   ├── middleware/             # JWT auth validation, role gating, and Multer file upload handler
+│   ├── models/                 # Mongoose schemas (User, Expense, Category, Budget, ActivityLog)
+│   ├── routes/                 # Express API routes
+│   ├── uploads/                # Local uploaded receipt storage (/uploads/receipts/)
+│   └── server.js               # Express server configuration & route mounting
+│
+├── scripts/
+│   └── migrate.js              # Authoritative JSON to MongoDB migration script
+│
+├── data_store.backup.json      # Safe historical JSON snapshot backup
+├── .env.example                # Environment variable configuration template
+├── package.json                # Root orchestration scripts (concurrent dev, migrate, build, start)
+└── server.js                   # Root application entry point
 ```
 
 ---
 
-## 🔑 Default Login Credentials
+## 🔑 User Accounts & Access Roles
 
-The application auto-seeds sample accounts upon initial run:
-
-| Role | Username | Password | Access Level |
+| Role | Username | Password | Permissions & Capabilities |
 | :--- | :--- | :--- | :--- |
-| **Main Person (Admin)** | `admin` | `admin123` | Full System Access |
-| **Second Person (User)** | `bhavik` | `user123` | Personal Records Only |
+| **Main Admin (Bhavik Bhai)** | `bhavik` | `bhavik123` | **Full access**: View all users' expenses, manage categories, manage budgets, create/edit/delete/bulk-delete all records, switch dashboard view scopes, manage users (enable/disable/reset passwords), view family comparison analytics. |
+| **Sub-Account 1 (Meet)** | `meet` | `meet123` | **Personal access**: View own personal dashboard, add/edit/delete own expenses, upload receipts, view own budget usage, export own statements. Strict backend protection blocks access to other members' data and admin controls. |
+| **Sub-Account 2 (Harsh)** | `harsh` | `harsh123` | **Personal access**: Identical permissions to Meet. Strictly scoped to Harsh's own data. Blocked from other members' records and admin APIs. |
 
 ---
 
-## ⚡ Quick Start & Installation
+## ⚡ Quick Start & Development Commands
 
-### 1. Install Dependencies
-Open terminal in the project directory and run:
+### 1. Prerequisites
+- **Node.js**: v18 or later
+- **MongoDB**: Local MongoDB daemon (`mongodb://127.0.0.1:27017/expense_tracker`), MongoDB Atlas URI, or zero-config automatic embedded MongoDB.
+
+### 2. Installation
+Install all dependencies (root server and React client):
 ```bash
 npm install
+npm --prefix client install
 ```
 
-### 2. Seed Initial Data (Optional)
-To seed initial demo expenses and accounts:
+### 3. Migrate Historical Data to MongoDB
+Run the migration script to import all historical users, 39 expenses, categories, and budgets into MongoDB:
 ```bash
-npm run seed
+npm run migrate
 ```
 
-### 3. Start Server
-Run the Node.js server:
+### 4. Run in Development Mode
+Launch both backend and React Vite frontend concurrently:
 ```bash
+npm run dev
+```
+- **React Frontend**: `http://localhost:5173`
+- **Express Backend API**: `http://localhost:5000`
+
+### 5. Production Build & Run
+Build the optimized React production bundle and run the unified server:
+```bash
+npm run build
 npm start
 ```
-
-Navigate to `http://localhost:5000` in your web browser.
+Open `http://localhost:5000` in your web browser.
 
 ---
 
-## 📡 REST API Documentation
+## 📡 REST API Architecture
+
+All endpoints are strictly authenticated via Bearer JWT token header or token query parameter:
 
 | Endpoint | Method | Role | Description |
 | :--- | :--- | :--- | :--- |
-| `/api/auth/login` | POST | Public | User authentication & JWT generation |
-| `/api/auth/me` | GET | Authenticated | Get current user profile |
-| `/api/expenses` | GET | Authenticated | List expenses with search, filters, pagination |
-| `/api/expenses` | POST | Authenticated | Create expense record with receipt upload |
-| `/api/expenses/:id` | PUT | Owner/Admin | Edit expense record |
-| `/api/expenses/:id` | DELETE | Owner/Admin | Delete expense record |
-| `/api/expenses/bulk` | DELETE | Owner/Admin | Bulk delete multiple expense records |
-| `/api/categories` | GET | Authenticated | List all active expense categories |
-| `/api/categories` | POST | Admin | Create custom category |
-| `/api/budgets` | GET | Authenticated | Get monthly budget status |
-| `/api/budgets` | POST | Authenticated | Set monthly budget amount |
-| `/api/reports/metrics` | GET | Authenticated | Get dashboard metric summaries |
-| `/api/reports/export/pdf` | GET | Authenticated | Download PDF expense statement |
-| `/api/reports/export/excel`| GET | Authenticated | Download Excel `.xlsx` spreadsheet |
-| `/api/users` | GET | Admin | List all registered users |
-| `/api/users` | POST | Admin | Create new user account |
-| `/api/users/:id/status` | PATCH | Admin | Enable or disable user access |
+| `/api/health` | GET | Public | System status, architecture, and MongoDB connectivity |
+| `/api/auth/login` | POST | Public | Authenticates user credentials & issues JWT token |
+| `/api/auth/me` | GET | Authenticated | Retrieves current authenticated user profile & role |
+| `/api/auth/profile` | PUT | Authenticated | Updates current user name, email, and mobile |
+| `/api/auth/change-password` | POST | Authenticated | Updates current user password |
+| `/api/expenses` | GET | Authenticated | Paginated, filtered, searchable expense records (role scoped) |
+| `/api/expenses` | POST | Authenticated | Creates a new expense (with optional receipt file) |
+| `/api/expenses/:id` | GET | Owner/Admin | Fetches single expense detail |
+| `/api/expenses/:id` | PUT | Owner/Admin | Updates an existing expense |
+| `/api/expenses/:id` | DELETE | Owner/Admin | Deletes an expense and removes attached receipt |
+| `/api/expenses/bulk` | DELETE | Owner/Admin | Bulk deletes multiple expenses by ID list |
+| `/api/expenses/clear-all` | DELETE | Owner/Admin | Clears expenses matching query filters |
+| `/api/categories` | GET | Authenticated | Lists all active categories |
+| `/api/categories` | POST | Admin | Creates a new category |
+| `/api/categories/:id` | PUT | Admin | Updates category name or icon |
+| `/api/categories/:id/status`| PATCH | Admin | Toggles category active/inactive status |
+| `/api/budgets` | GET | Authenticated | Calculates monthly budget, spending, and percentage |
+| `/api/budgets` | POST | Authenticated | Sets monthly budget limit |
+| `/api/reports/metrics` | GET | Authenticated | Real MongoDB aggregation for stats & charts |
+| `/api/reports/export/pdf` | GET | Authenticated | Generates and streams PDF statement |
+| `/api/reports/export/excel`| GET | Authenticated | Generates and streams Excel `.xlsx` spreadsheet |
+| `/api/reports/export/csv` | GET | Authenticated | Generates and streams CSV file |
+| `/api/users` | GET | Admin | Lists all user accounts with spending statistics |
+| `/api/users` | POST | Admin | Creates a new user account |
+| `/api/users/:id` | PUT | Admin | Updates user name, email, mobile, role |
+| `/api/users/:id/status` | PATCH | Admin | Enables or disables user account |
+| `/api/users/:id/reset-password`| POST | Admin | Resets user password |
 
 ---
 
-## ☁️ Deployment Instructions
+## 🔒 Security & Data Integrity Highlights
 
-### Deploy Backend (Render / Railway)
-1. Push source code to GitHub repository.
-2. Create a Web Service on Render or Railway connected to the repo.
-3. Set Environment Variables (`PORT`, `JWT_SECRET`, `MONGODB_URI`).
-4. Set Build Command to `npm install` and Start Command to `node server.js`.
-
-### Deploy Database (MongoDB Atlas)
-1. Create a cluster on MongoDB Atlas.
-2. Obtain connection string and set `MONGODB_URI` in `.env`.
+1. **Backend Authorization Enforcement**: Non-admin users are strictly scoped on the server layer. URL or query parameter tampering (`?person=...` or `?userId=...`) is ignored for non-admins.
+2. **Authoritative MongoDB Persistence**: The application directly queries MongoDB with Mongoose models. Fallback JSON writing has been removed for runtime operations.
+3. **Password Security**: Passwords are encrypted using `bcryptjs` with salt rounds. Plaintext passwords are never stored.
+4. **Disabled Account Handling**: Real-time DB lookup in auth middleware invalidates sessions immediately if an account is disabled by Admin.
+5. **Safe File Uploads**: Multer validates file types (JPEG, PNG, WEBP, PDF) and size limits (5MB), saving files with unique sanitized timestamps.
 
 ---
 
 ## 📄 License
-This project is licensed under the MIT License.
+MIT License

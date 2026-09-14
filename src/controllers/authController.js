@@ -14,9 +14,9 @@ const login = async (req, res) => {
 
     let user = null;
     if (getMongoStatus()) {
-      user = await User.findOne({ username: username.toLowerCase() });
+      user = await User.findOne({ username: username.toLowerCase().trim() });
     } else {
-      user = memoryStore.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+      user = memoryStore.users.find(u => u.username.toLowerCase() === username.toLowerCase().trim());
     }
 
     if (!user) {
@@ -71,15 +71,23 @@ const login = async (req, res) => {
 
 const changePassword = async (req, res) => {
   try {
-    const { oldPassword, newPassword } = req.body;
+    const { oldPassword, newPassword, confirmPassword } = req.body;
     const userId = req.user.id;
 
     if (!oldPassword || !newPassword) {
-      return res.status(400).json({ success: false, message: 'Current password and new password required.' });
+      return res.status(400).json({ success: false, message: 'Current password and new password are required.' });
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      return res.status(400).json({ success: false, message: 'New password and confirm password do not match.' });
+    }
+
+    if (newPassword.length < 4) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 4 characters long.' });
     }
 
     if (getMongoStatus()) {
-      const user = await User.findById(userId);
+      const user = await User.findOne({ $or: [{ _id: userId }, { id: userId }] });
       if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
       const isMatch = await user.matchPassword(oldPassword);
@@ -112,7 +120,7 @@ const getProfile = async (req, res) => {
     let user = null;
 
     if (getMongoStatus()) {
-      user = await User.findById(userId).select('-password');
+      user = await User.findOne({ $or: [{ _id: userId }, { id: userId }] }).select('-password');
     } else {
       const found = memoryStore.users.find(u => (u._id || u.id) === userId);
       if (found) {
@@ -128,8 +136,60 @@ const getProfile = async (req, res) => {
   }
 };
 
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, email, mobile } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ success: false, message: 'Name and email are required.' });
+    }
+
+    if (getMongoStatus()) {
+      const user = await User.findOne({ $or: [{ _id: userId }, { id: userId }] });
+      if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+      // Check unique email conflict
+      const existing = await User.findOne({ email, _id: { $ne: user._id } });
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Email address already in use.' });
+      }
+
+      user.name = name.trim();
+      user.email = email.trim();
+      if (mobile !== undefined) user.mobile = mobile.trim();
+      await user.save();
+
+      const userObj = user.toObject ? user.toObject() : user;
+      delete userObj.password;
+      res.json({ success: true, message: 'Profile updated successfully.', user: userObj });
+    } else {
+      const idx = memoryStore.users.findIndex(u => (u._id || u.id) === userId);
+      if (idx === -1) return res.status(404).json({ success: false, message: 'User not found.' });
+
+      const existing = memoryStore.users.find(u => u.email === email && (u._id || u.id) !== userId);
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Email address already in use.' });
+      }
+
+      memoryStore.users[idx].name = name.trim();
+      memoryStore.users[idx].email = email.trim();
+      if (mobile !== undefined) memoryStore.users[idx].mobile = mobile.trim();
+      saveLocalStore();
+
+      const { password, ...safeUser } = memoryStore.users[idx];
+      res.json({ success: true, message: 'Profile updated successfully.', user: safeUser });
+    }
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ success: false, message: 'Error updating profile.' });
+  }
+};
+
 module.exports = {
   login,
   changePassword,
-  getProfile
+  getProfile,
+  updateProfile
 };
+

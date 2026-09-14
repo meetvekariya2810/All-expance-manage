@@ -1,18 +1,17 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "data_store.json"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
     },
     {
+      "source": "/uploads/(.*)",
+      "destination": "/api/index.js"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/$1"
+      "destination": "/client/dist/$1"
     }
   ]
 }

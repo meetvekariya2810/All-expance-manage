@@ -74,11 +74,21 @@ function saveLocalStore() {
   }
 }
 
+let lastConnectionAttempt = 0;
+const CONNECTION_RETRY_INTERVAL = 30000; // 30 seconds
+
 const connectDB = async () => {
   if (cached.conn && mongoose.connection.readyState === 1) {
     isMongoConnected = true;
     return cached.conn;
   }
+
+  // If connection failed recently, avoid blocking incoming requests
+  if (Date.now() - lastConnectionAttempt < CONNECTION_RETRY_INTERVAL) {
+    loadLocalStore();
+    return null;
+  }
+  lastConnectionAttempt = Date.now();
 
   const isVercel = !!(process.env.VERCEL || process.env.NOW_BUILDER);
   const connUri = process.env.MONGODB_URI;
@@ -95,7 +105,7 @@ const connectDB = async () => {
     try {
       if (!cached.promise) {
         cached.promise = mongoose.connect(localUri, {
-          serverSelectionTimeoutMS: 2000
+          serverSelectionTimeoutMS: 1200
         });
       }
       cached.conn = await cached.promise;
@@ -105,7 +115,6 @@ const connectDB = async () => {
     } catch (err) {
       cached.promise = null;
       isMongoConnected = false;
-      console.warn('⚠️ Local MongoDB connection unavailable:', err.message);
       loadLocalStore();
       return null;
     }
@@ -113,10 +122,9 @@ const connectDB = async () => {
 
   try {
     if (!cached.promise) {
-      console.log('Connecting to MongoDB Atlas / Cloud database...');
       cached.promise = mongoose.connect(connUri, {
         bufferCommands: false,
-        serverSelectionTimeoutMS: 5000
+        serverSelectionTimeoutMS: 1200
       }).then((m) => m);
     }
 
@@ -127,7 +135,6 @@ const connectDB = async () => {
   } catch (err) {
     cached.promise = null;
     isMongoConnected = false;
-    console.error('❌ MongoDB Connection Error:', err.message);
     loadLocalStore();
     return null;
   }
@@ -135,10 +142,15 @@ const connectDB = async () => {
 
 const getMongoStatus = () => isMongoConnected;
 
+// Initialize local store immediately
+loadLocalStore();
+
 module.exports = {
+
   connectDB,
   getMongoStatus,
   memoryStore,
   saveLocalStore,
   loadLocalStore
 };
+

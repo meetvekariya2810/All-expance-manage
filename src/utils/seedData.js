@@ -134,6 +134,13 @@ const seedData = async () => {
         if (!found) {
           await User.collection.insertOne({ ...u, created_at: new Date(u.created_at || Date.now()) });
           console.log(`✅ Inserted user into MongoDB: ${u.username}`);
+        } else {
+          // Enforce role consistency
+          const targetRole = u.username === 'bhavik' || u.username === 'admin' ? 'admin' : 'user';
+          if (found.role !== targetRole) {
+            await User.updateOne({ _id: found._id }, { role: targetRole });
+            console.log(`Updated user ${u.username} role to ${targetRole}`);
+          }
         }
       }
 
@@ -144,6 +151,8 @@ const seedData = async () => {
         const exists = await Expense.findOne({ $or: [{ expense_id: expId }, { _id: exp._id }] });
         if (!exists) {
           const doc = {
+            _id: exp._id || exp.id || `exp_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+            id: exp.id || exp._id || `exp_${Date.now()}_${Math.floor(Math.random()*1000)}`,
             expense_id: exp.expense_id || `EXP-${Date.now()}`,
             user_id: exp.user_id,
             user_name: exp.user_name || 'User',
@@ -184,6 +193,12 @@ const seedData = async () => {
     if (!memoryStore.users || memoryStore.users.length === 0) {
       memoryStore.users = seedStore.users || initialUsers;
     }
+    // Verify roles in memory store
+    memoryStore.users.forEach(u => {
+      if (u.username === 'bhavik' || u.username === 'admin') u.role = 'admin';
+      else if (u.username === 'meet' || u.username === 'harsh') u.role = 'user';
+    });
+
     if (!memoryStore.expenses || memoryStore.expenses.length === 0) {
       memoryStore.expenses = expensesToSeed;
     }
@@ -196,6 +211,7 @@ const seedData = async () => {
     saveLocalStore();
     console.log('✅ Memory Data Store initialized!');
   }
+
 };
 
 if (require.main === module) {

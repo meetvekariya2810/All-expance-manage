@@ -11,6 +11,7 @@ router.get('/:id', getExpenseById);
 router.post('/', upload.single('receipt'), createExpense);
 router.put('/:id', upload.single('receipt'), updateExpense);
 router.delete('/clear-all', clearAllExpenses);
+router.delete('/erase-all', clearAllExpenses);
 router.delete('/bulk', bulkDeleteExpenses);
 router.delete('/:id', deleteExpense);
 
