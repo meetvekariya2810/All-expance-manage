@@ -206,10 +206,11 @@ const connectDB = async () => {
     }
   }
 
-  // 2. In production without remote URI -> fail clearly
-  if (process.env.NODE_ENV === 'production') {
+  // 2. In serverless (Vercel) or production without remote URI -> fail cleanly without crashing
+  const isServerless = !!(process.env.VERCEL || process.env.NOW_BUILDER || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  if (isServerless || process.env.NODE_ENV === 'production') {
     isMongoConnected = false;
-    console.error('❌ FATAL: Production requires a valid MongoDB Atlas MONGODB_URI in environment variables.');
+    console.error('❌ MONGODB_URI is required in Vercel environment variables.');
     return null;
   }
 
@@ -234,8 +235,14 @@ const connectDB = async () => {
       }
     }
 
-    // Local persistent embedded MongoDB instance
-    const { MongoMemoryServer } = require('mongodb-memory-server');
+    // Local persistent embedded MongoDB instance for offline development
+    let MongoMemoryServer;
+    try {
+      MongoMemoryServer = require('mongodb-memory-server').MongoMemoryServer;
+    } catch (mmsErr) {
+      console.warn('Development embedded MongoDB server module not loaded.');
+      return null;
+    }
     if (!mongoServerInstance) {
       const localDbPath = path.join(__dirname, '../../.mongo_data');
       if (!fs.existsSync(localDbPath)) fs.mkdirSync(localDbPath, { recursive: true });
