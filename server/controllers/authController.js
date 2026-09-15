@@ -12,28 +12,56 @@ const login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username and password are required.' });
     }
 
-    const trimmedUsername = username.toLowerCase().trim();
+    const cleanInput = username.trim().toLowerCase();
     let user = null;
     let isMatch = false;
 
     if (getMongoStatus()) {
-      user = await User.findOne({ username: trimmedUsername });
+      user = await User.findOne({
+        $or: [
+          { username: cleanInput },
+          { email: cleanInput },
+          { username: new RegExp(`^${cleanInput}$`, 'i') }
+        ]
+      });
+
       if (!user) {
         return res.status(401).json({ success: false, message: 'Invalid username or password.' });
       }
       if (user.status === 'disabled') {
         return res.status(403).json({ success: false, message: 'Your account has been disabled by Admin.' });
       }
-      isMatch = await user.matchPassword(password);
+      try {
+        isMatch = await user.matchPassword(password);
+      } catch (pwErr) {
+        isMatch = false;
+      }
+      // Graceful fallback if password was stored in plain text
+      if (!isMatch && user.password === password) {
+        isMatch = true;
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(password, salt);
+        await user.save().catch(() => {});
+      }
     } else {
-      user = memoryStore.users.find(u => u.username && u.username.toLowerCase() === trimmedUsername);
+      user = memoryStore.users.find(
+        u => (u.username && u.username.toLowerCase() === cleanInput) ||
+             (u.email && u.email.toLowerCase() === cleanInput)
+      );
       if (!user) {
         return res.status(401).json({ success: false, message: 'Invalid username or password.' });
       }
       if (user.status === 'disabled') {
         return res.status(403).json({ success: false, message: 'Your account has been disabled by Admin.' });
       }
-      isMatch = await bcrypt.compare(password, user.password);
+      try {
+        isMatch = await bcrypt.compare(password, user.password);
+      } catch (e) {
+        isMatch = false;
+      }
+      if (!isMatch && user.password === password) {
+        isMatch = true;
+      }
     }
 
     if (!isMatch) {

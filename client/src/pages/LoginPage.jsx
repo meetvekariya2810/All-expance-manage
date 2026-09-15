@@ -38,15 +38,28 @@ export default function LoginPage() {
       showToast(`Welcome back, ${res.user.name}!`, 'success');
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      // Clean, generic error message preventing user enumeration or leaking DB details
-      const msg =
-        err.response?.data?.message ||
-        (err.message && !err.message.includes('object') ? err.message : null) ||
-        'Invalid username or password. Please check your credentials and try again.';
-      setError(msg);
+      const serverMsg = err.response?.data?.message;
+      let displayMsg = 'Invalid username or password. Please check your credentials and try again.';
+
+      if (serverMsg) {
+        displayMsg = serverMsg;
+      } else if (err.response?.status === 500 || err.message?.includes('500')) {
+        displayMsg = 'Server is currently initializing or busy. Please try again in a few seconds.';
+      } else if (err.response?.status === 503) {
+        displayMsg = 'Database service is connecting. Please wait a moment and try again.';
+      } else if (err.message && !err.message.includes('object') && !err.message.includes('status code')) {
+        displayMsg = err.message;
+      }
+      setError(displayMsg);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleQuickFill = (u, p) => {
+    setUsername(u);
+    setPassword(p);
+    setError('');
   };
 
   return (
@@ -251,8 +264,88 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {/* Quick Account Selector */}
+          <div className="mt-4 pt-3" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Quick Login / Demo Accounts
+              </span>
+              <span className="badge bg-primary-subtle text-primary" style={{ fontSize: '0.68rem' }}>4 Active</span>
+            </div>
+            <div className="row g-2">
+              <div className="col-6">
+                <button
+                  type="button"
+                  onClick={() => handleQuickFill('bhavik', 'bhavik123')}
+                  className="btn btn-sm w-100 text-start d-flex align-items-center justify-content-between p-2"
+                  style={{
+                    backgroundColor: 'rgba(79, 70, 229, 0.15)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    color: '#e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem'
+                  }}
+                >
+                  <span><strong>bhavik</strong> (Admin)</span>
+                  <i className="fa-solid fa-arrow-turn-up text-primary" style={{ fontSize: '0.7rem' }}></i>
+                </button>
+              </div>
+              <div className="col-6">
+                <button
+                  type="button"
+                  onClick={() => handleQuickFill('admin', 'admin123')}
+                  className="btn btn-sm w-100 text-start d-flex align-items-center justify-content-between p-2"
+                  style={{
+                    backgroundColor: 'rgba(79, 70, 229, 0.15)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    color: '#e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem'
+                  }}
+                >
+                  <span><strong>admin</strong> (Admin)</span>
+                  <i className="fa-solid fa-arrow-turn-up text-primary" style={{ fontSize: '0.7rem' }}></i>
+                </button>
+              </div>
+              <div className="col-6">
+                <button
+                  type="button"
+                  onClick={() => handleQuickFill('meet', 'meet123')}
+                  className="btn btn-sm w-100 text-start d-flex align-items-center justify-content-between p-2"
+                  style={{
+                    backgroundColor: 'rgba(14, 165, 233, 0.15)',
+                    border: '1px solid rgba(14, 165, 233, 0.3)',
+                    color: '#e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem'
+                  }}
+                >
+                  <span><strong>meet</strong> (User)</span>
+                  <i className="fa-solid fa-arrow-turn-up text-info" style={{ fontSize: '0.7rem' }}></i>
+                </button>
+              </div>
+              <div className="col-6">
+                <button
+                  type="button"
+                  onClick={() => handleQuickFill('harsh', 'harsh123')}
+                  className="btn btn-sm w-100 text-start d-flex align-items-center justify-content-between p-2"
+                  style={{
+                    backgroundColor: 'rgba(14, 165, 233, 0.15)',
+                    border: '1px solid rgba(14, 165, 233, 0.3)',
+                    color: '#e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem'
+                  }}
+                >
+                  <span><strong>harsh</strong> (User)</span>
+                  <i className="fa-solid fa-arrow-turn-up text-info" style={{ fontSize: '0.7rem' }}></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Secure System Footer */}
-          <div className="mt-4 pt-3 text-center" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+          <div className="mt-3 pt-2 text-center">
             <p className="mb-0 text-muted" style={{ fontSize: '0.75rem', color: '#64748b' }}>
               <i className="fa-solid fa-shield-halved me-1 text-primary"></i>
               Secure Encrypted Authentication
