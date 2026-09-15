@@ -73,6 +73,22 @@ export default function DashboardPage() {
     return () => window.removeEventListener('app:refresh', handleRefresh);
   }, [fetchDashboardData]);
 
+  const handleDeleteExpense = async (exp) => {
+    const id = exp._id || exp.id;
+    if (!id) return;
+    const confirmMsg = `Delete Expense?\n\nThis action permanently deletes "${exp.title}" (₹${(parseFloat(exp.amount) || 0).toLocaleString('en-IN')}) from the database.\nIt cannot be recovered.\n\nClick OK to confirm permanent deletion.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const res = await expenseService.deleteExpense(id);
+      showToast(res?.message || 'Expense permanently deleted.', 'success');
+      setSelectedExpense(null);
+      await fetchDashboardData();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Failed to delete expense.', 'error');
+    }
+  };
+
   // Specific user data helpers
   const getUserStat = (username) => {
     return usersSummary.find(u => u.username === username) || {
@@ -539,6 +555,7 @@ export default function DashboardPage() {
         onClose={() => setSelectedExpense(null)}
         onViewReceipt={(url) => setReceiptUrl(url)}
         onEdit={(exp) => navigate(`/expenses/edit/${exp.id || exp._id}`)}
+        onDelete={handleDeleteExpense}
       />
 
       <ReceiptModal

@@ -1,19 +1,60 @@
 const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+try {
+  require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+} catch (e) {}
+
+// Disable Mongoose command buffering so queries fail fast when connection is down
+mongoose.set('bufferCommands', false);
 
 let isMongoConnected = false;
 let mongoServerInstance = null;
 
-// Global cache object for connection re-use
+// Global cache object for connection re-use across serverless invocations
 let cached = global.mongooseCache;
 if (!cached) {
   cached = global.mongooseCache = { conn: null, promise: null };
 }
 
-// Function to auto-populate MongoDB from backup if collections are empty
-const ensureDataPopulated = async () => {
+// Persistent tombstone tracking for deleted expenses
+const TOMBSTONE_FILE = path.join(__dirname, '../../.deleted_expenses.json');
+
+const loadDeletedIds = () => {
+  try {
+    if (fs.existsSync(TOMBSTONE_FILE)) {
+      const raw = fs.readFileSync(TOMBSTONE_FILE, 'utf8');
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return list.map(String);
+    }
+  } catch (e) {}
+  return [];
+};
+
+const recordDeletedExpenseId = (id) => {
+  if (!id) return;
+  try {
+    const list = loadDeletedIds();
+    const idStr = String(id);
+    if (!list.includes(idStr)) {
+      list.push(idStr);
+      fs.writeFileSync(TOMBSTONE_FILE, JSON.stringify(list, null, 2), 'utf8');
+    }
+  } catch (e) {
+    console.warn('Tombstone save notice:', e.message);
+  }
+};
+
+const isExpenseDeleted = (id) => {
+  if (!id) return false;
+  const list = loadDeletedIds();
+  return list.includes(String(id));
+};
+
+// Safe Initial Seed: ONLY run if the database is 100% brand new (0 users)
+// Never resets, overwrites, or recreates deleted expenses
+const ensureInitialData = async () => {
   try {
     const User = require('../models/User');
     const Expense = require('../models/Expense');
@@ -21,187 +62,237 @@ const ensureDataPopulated = async () => {
     const Budget = require('../models/Budget');
 
     const userCount = await User.countDocuments();
-    if (userCount === 0) {
-      console.log('🔄 Initializing authoritative MongoDB data from backup snapshot...');
-      let backupPath = path.join(__dirname, '../../data_store.backup.json');
-      if (!fs.existsSync(backupPath)) {
-        backupPath = path.join(__dirname, '../../data_store.json');
-      }
+    if (userCount > 0) {
+      // Database already has users - DO NOT TOUCH OR OVERWRITE
+      return;
+    }
 
-      if (fs.existsSync(backupPath)) {
-        const raw = fs.readFileSync(backupPath, 'utf8');
-        const data = JSON.parse(raw);
+    console.log('🔄 First-time setup: Initializing baseline records in MongoDB...');
 
-        if (data.categories && data.categories.length > 0) {
-          for (const c of data.categories) {
-            await Category.create(c).catch(() => {});
-          }
-        }
-        if (data.users && data.users.length > 0) {
-          for (const u of data.users) {
-            await User.create(u).catch(() => {});
-          }
-        }
-        if (data.budgets && data.budgets.length > 0) {
-          for (const b of data.budgets) {
-            await Budget.create(b).catch(() => {});
-          }
-        }
-        if (data.expenses && data.expenses.length > 0) {
-          for (const e of data.expenses) {
-            await Expense.create({
-              ...e,
-              created_by: e.created_by || e.user_name || 'Member'
-            }).catch(() => {});
-          }
-        }
+    // Locate baseline snapshot
+    let seedData = null;
+    const candidates = [
+      path.join(__dirname, '../../data_store.json'),
+      path.join(__dirname, '../../data_store.backup.json')
+    ];
 
-        const ActivityLog = require('../models/ActivityLog');
-        const actCount = await ActivityLog.countDocuments();
-        if (actCount === 0 && data.expenses && data.expenses.length > 0) {
-          const recent = data.expenses.slice(-12);
-          for (const e of recent) {
-            await ActivityLog.create({
-              user_id: e.user_id,
-              user_name: e.user_name || 'Member',
-              action: 'Expense Added',
-              expense_id: e.expense_id || e.id,
-              amount: parseFloat(e.amount) || 0,
-              category: e.category || 'General',
-              title: e.title,
-              details: `${e.user_name || 'Member'} added ₹${(parseFloat(e.amount) || 0).toLocaleString('en-IN')} for ${e.category || 'General'}`,
-              type: 'create',
-              timestamp: e.created_at ? new Date(e.created_at) : new Date()
-            }).catch(() => {});
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        try {
+          const raw = fs.readFileSync(p, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.users && parsed.users.length > 0) {
+            seedData = parsed;
+            break;
           }
-        }
-
-        console.log('✅ MongoDB successfully populated with all users, expenses, categories, budgets, and activity log.');
+        } catch (e) {}
       }
     }
+
+    if (!seedData) return;
+
+    // 1. Categories
+    if (Array.isArray(seedData.categories) && seedData.categories.length > 0) {
+      for (const c of seedData.categories) {
+        const catName = c.category_name || c.name;
+        if (!catName) continue;
+        const exists = await Category.findOne({ category_name: catName });
+        if (!exists) {
+          await Category.create(c).catch(() => {});
+        }
+      }
+    }
+
+    // 2. Users (Bhavik Admin, Meet, Harsh)
+    if (Array.isArray(seedData.users) && seedData.users.length > 0) {
+      for (const u of seedData.users) {
+        const exists = await User.findOne({ username: u.username.toLowerCase() });
+        if (!exists) {
+          await User.create(u).catch(() => {});
+        }
+      }
+    }
+
+    // 3. Budgets
+    if (Array.isArray(seedData.budgets) && seedData.budgets.length > 0) {
+      for (const b of seedData.budgets) {
+        const exists = await Budget.findOne({ user_id: b.user_id, month: b.month });
+        if (!exists) {
+          await Budget.create(b).catch(() => {});
+        }
+      }
+    }
+
+    // 4. Expenses (Skip any deleted tombstones)
+    const deletedList = loadDeletedIds();
+    if (Array.isArray(seedData.expenses) && seedData.expenses.length > 0) {
+      for (const exp of seedData.expenses) {
+        const ids = [String(exp._id), String(exp.id), String(exp.expense_id)];
+        if (ids.some(id => deletedList.includes(id) || isExpenseDeleted(id))) {
+          continue; // Permanently skip deleted expenses
+        }
+
+        const exists = await Expense.findOne({
+          $or: [{ _id: exp._id }, { id: exp.id }, { expense_id: exp.expense_id }]
+        });
+        if (!exists) {
+          await Expense.create({
+            ...exp,
+            created_by: exp.created_by || exp.user_name || 'Member'
+          }).catch(() => {});
+        }
+      }
+    }
+
+    console.log('✅ Baseline initialization complete in MongoDB.');
   } catch (err) {
-    console.warn('Auto data population notice:', err.message);
+    console.warn('Initial data setup notice:', err.message);
   }
 };
 
-const net = require('net');
+// Wire Mongoose connection event listeners
+mongoose.connection.on('connected', () => {
+  isMongoConnected = true;
+});
 
-// Quick probe to check if local port is active
-const checkPortListening = (port = 27017, host = '127.0.0.1', timeout = 250) => {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(timeout);
-    socket.on('connect', () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.on('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.on('error', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.connect(port, host);
-  });
-};
+mongoose.connection.on('error', (err) => {
+  isMongoConnected = false;
+  console.error('⚠️ MongoDB connection error:', err.message);
+});
 
+mongoose.connection.on('disconnected', () => {
+  isMongoConnected = false;
+  console.warn('⚠️ MongoDB disconnected.');
+});
+
+/**
+ * Connect to MongoDB (Atlas as Primary Source of Truth)
+ * Reads process.env.MONGODB_URI.
+ * Connects once and re-uses connection across invocations.
+ */
 const connectDB = async () => {
   if (cached.conn && mongoose.connection.readyState === 1) {
     isMongoConnected = true;
     return cached.conn;
   }
 
-  const connUri = process.env.MONGODB_URI || '';
+  const connUri = (process.env.MONGODB_URI || '').trim();
   const isRemoteUri = connUri.startsWith('mongodb+srv://') || 
     (connUri.startsWith('mongodb://') && !connUri.includes('127.0.0.1') && !connUri.includes('localhost'));
 
-  // 1. Connect to remote MongoDB (e.g. MongoDB Atlas) if provided in .env
+  // 1. Remote MongoDB Atlas Connection
   if (isRemoteUri) {
     try {
       if (!cached.promise) {
         cached.promise = mongoose.connect(connUri, {
-          serverSelectionTimeoutMS: 5000
+          serverSelectionTimeoutMS: 5000,
+          connectTimeoutMS: 5000,
+          bufferCommands: false
         }).then((m) => m);
       }
       cached.conn = await cached.promise;
       isMongoConnected = true;
-      console.log('✅ Connected to remote MongoDB Atlas database.');
-      await ensureDataPopulated();
-      return cached.conn;
-    } catch (err) {
-      console.warn(`⚠️ Could not connect to remote MONGODB_URI (${err.message}).`);
-      cached.promise = null;
-    }
-  }
-
-  // 2. Check if local MongoDB daemon is listening on port 27017
-  const isLocalPortOpen = await checkPortListening(27017, '127.0.0.1');
-
-  if (isLocalPortOpen) {
-    const localUri = connUri.includes('127.0.0.1') || connUri.includes('localhost')
-      ? connUri
-      : 'mongodb://127.0.0.1:27017/expense_tracker';
-    try {
-      if (!cached.promise) {
-        cached.promise = mongoose.connect(localUri, {
-          serverSelectionTimeoutMS: 2000
-        }).then((m) => m);
-      }
-      cached.conn = await cached.promise;
-      isMongoConnected = true;
-      console.log('✅ Connected to local MongoDB daemon (127.0.0.1:27017).');
-      await ensureDataPopulated();
+      const maskedUri = connUri.replace(/:([^@]+)@/, ':****@');
+      console.log(`✅ MongoDB connected successfully to authoritative database [${maskedUri}]`);
+      await ensureInitialData();
       return cached.conn;
     } catch (err) {
       cached.promise = null;
+      isMongoConnected = false;
+      console.error('❌ MongoDB Atlas connection failed.');
+      console.error(`   Error details: ${err.message}`);
+      console.error('   Please check MONGODB_URI, Atlas user credentials, and Network Access (IP Whitelist).');
+      return null;
     }
   }
 
-  // 3. Embedded authoritative MongoDB instance (zero-configuration, no ECONNREFUSED)
-  console.log('ℹ️ Local MongoDB service not active on port 27017. Initializing embedded authoritative MongoDB instance...');
+  // 2. In production without remote URI -> fail clearly
+  if (process.env.NODE_ENV === 'production') {
+    isMongoConnected = false;
+    console.error('❌ FATAL: Production requires a valid MongoDB Atlas MONGODB_URI in environment variables.');
+    return null;
+  }
+
+  // 3. Local Development Mode
   try {
-    let MongoMemoryServer;
-    try {
-      const mms = require('mongodb-memory-server');
-      MongoMemoryServer = mms.MongoMemoryServer;
-    } catch (e) {
-      throw new Error('mongodb-memory-server is not installed. Please run npm install or configure MONGODB_URI in .env.');
-    }
-
-    if (!mongoServerInstance) {
-      mongoServerInstance = await MongoMemoryServer.create({
-        instance: {
-          dbName: 'expense_tracker'
+    // If user provided a local URI, attempt connection
+    if (connUri && (connUri.includes('127.0.0.1') || connUri.includes('localhost'))) {
+      try {
+        if (!cached.promise) {
+          cached.promise = mongoose.connect(connUri, {
+            serverSelectionTimeoutMS: 1500,
+            bufferCommands: false
+          }).then(m => m);
         }
-      });
+        cached.conn = await cached.promise;
+        isMongoConnected = true;
+        console.log(`✅ Connected to local MongoDB instance: ${connUri}`);
+        await ensureInitialData();
+        return cached.conn;
+      } catch (localErr) {
+        cached.promise = null;
+      }
     }
 
-    const memoryUri = mongoServerInstance.getUri();
+    // Local persistent embedded MongoDB instance
+    const { MongoMemoryServer } = require('mongodb-memory-server');
+    if (!mongoServerInstance) {
+      const localDbPath = path.join(__dirname, '../../.mongo_data');
+      if (!fs.existsSync(localDbPath)) fs.mkdirSync(localDbPath, { recursive: true });
+      try {
+        mongoServerInstance = await MongoMemoryServer.create({
+          instance: { dbPath: localDbPath, dbName: 'expense_tracker' }
+        });
+        console.log('💾 Development MongoDB storage active at .mongo_data');
+      } catch (e) {
+        mongoServerInstance = await MongoMemoryServer.create({
+          instance: { dbName: 'expense_tracker' }
+        });
+      }
+    }
+
+    const devUri = mongoServerInstance.getUri();
     if (!cached.promise) {
-      cached.promise = mongoose.connect(memoryUri, {
-        serverSelectionTimeoutMS: 5000
-      }).then((m) => m);
+      cached.promise = mongoose.connect(devUri, {
+        serverSelectionTimeoutMS: 5000,
+        bufferCommands: false
+      }).then(m => m);
     }
-
     cached.conn = await cached.promise;
     isMongoConnected = true;
-    console.log('✅ Embedded Authoritative MongoDB Server started and connected successfully.');
-    await ensureDataPopulated();
+    console.log('✅ Development MongoDB engine connected successfully.');
+    await ensureInitialData();
     return cached.conn;
-  } catch (embeddedErr) {
+  } catch (devErr) {
     cached.promise = null;
     isMongoConnected = false;
-    console.error('❌ Failed to establish MongoDB connection:', embeddedErr.message);
-    throw embeddedErr;
+    console.error('❌ Development database initialization failed:', devErr.message);
+    return null;
   }
 };
 
 const getMongoStatus = () => isMongoConnected && mongoose.connection.readyState === 1;
 
+// Legacy compatibility helpers (ensuring no memory store overwriting)
+const memoryStore = { users: [], expenses: [], categories: [], budgets: [], activityLogs: [] };
+const saveLocalStore = () => {};
+const loadLocalStore = () => {};
+const syncExpenseStore = (action, payload) => {
+  if (action === 'delete' && payload) {
+    recordDeletedExpenseId(payload);
+  } else if (action === 'bulk_delete' && Array.isArray(payload)) {
+    payload.forEach(id => recordDeletedExpenseId(id));
+  }
+};
+
 module.exports = {
   connectDB,
   getMongoStatus,
-  ensureDataPopulated
+  ensureInitialData,
+  isExpenseDeleted,
+  recordDeletedExpenseId,
+  syncExpenseStore,
+  memoryStore,
+  saveLocalStore,
+  loadLocalStore
 };

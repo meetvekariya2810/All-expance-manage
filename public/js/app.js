@@ -1094,33 +1094,64 @@ const App = {
     }
   },
 
-  async deleteExpense(id) {
-    if (confirm('Are you sure you want to delete this expense record?')) {
+  async deleteExpense(id, btnElement = null) {
+    if (!id) return;
+    const confirmMsg = "Delete Expense?\n\nThis action permanently deletes this expense record from the database.\nIt cannot be recovered.\n\nClick OK to confirm permanent deletion.";
+    if (!confirm(confirmMsg)) return;
+
+    // Double delete protection: disable button and show indicator
+    const btn = btnElement || document.querySelector(`button[onclick*="deleteExpense('${id}')"]`);
+    let originalHtml = '';
+    if (btn) {
+      originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Deleting...';
+    }
+
+    try {
       const res = await this.apiRequest(`/api/expenses/${id}`, 'DELETE');
-      if (res.success) {
-        this.showToast(res.message, 'success');
-        this.loadExpenses();
-        this.loadDashboardData();
+      if (res && res.success) {
+        this.showToast(res.message || 'Expense deleted permanently.', 'success');
+        await Promise.all([
+          this.loadExpenses(),
+          this.loadDashboardData()
+        ]);
       } else {
-        this.showToast(res.message, 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
+        this.showToast(res?.message || 'Unable to delete expense. Please try again.', 'error');
       }
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+      this.showToast('Unable to delete expense. Please check connection and try again.', 'error');
     }
   },
 
   async eraseAllExpenses() {
     const confirmMsg = Auth.isAdmin() 
-      ? '⚠️ DANGER: Are you sure you want to permanently erase ALL expense records in the system? This action cannot be undone!'
-      : '⚠️ DANGER: Are you sure you want to permanently erase ALL of your expense records? This action cannot be undone!';
+      ? '⚠️ PERMANENT ERASE: Are you sure you want to permanently delete ALL matching expense records in the database? This action cannot be undone!'
+      : '⚠️ PERMANENT ERASE: Are you sure you want to permanently delete ALL of your expense records in the database? This action cannot be undone!';
 
-    if (confirm(confirmMsg)) {
+    if (!confirm(confirmMsg)) return;
+
+    try {
       const res = await this.apiRequest('/api/expenses/clear-all', 'DELETE');
-      if (res.success) {
-        this.showToast(res.message || 'All expenses erased successfully.', 'success');
-        this.loadExpenses();
-        this.loadDashboardData();
+      if (res && res.success) {
+        this.showToast(res.message || 'All expenses permanently erased.', 'success');
+        await Promise.all([
+          this.loadExpenses(),
+          this.loadDashboardData()
+        ]);
       } else {
-        this.showToast(res.message || 'Unable to erase records.', 'error');
+        this.showToast(res?.message || 'Unable to erase records.', 'error');
       }
+    } catch (err) {
+      this.showToast('Unable to erase records. Please try again.', 'error');
     }
   },
 
@@ -1139,18 +1170,41 @@ const App = {
     const selected = Array.from(document.querySelectorAll('.expense-checkbox:checked')).map(cb => cb.value);
     if (selected.length === 0) return;
 
-    if (confirm(`Are you sure you want to delete ${selected.length} expense record(s)?`)) {
+    const confirmMsg = `Delete ${selected.length} Expense Record(s)?\n\nThis action permanently deletes these ${selected.length} records from the database.\nIt cannot be recovered.\n\nClick OK to confirm permanent deletion.`;
+    if (!confirm(confirmMsg)) return;
+
+    const btn = document.getElementById('btnBulkDelete');
+    let origHtml = '';
+    if (btn) {
+      origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Deleting...';
+    }
+
+    try {
       const res = await this.apiRequest('/api/expenses/bulk', 'DELETE', { ids: selected });
-      if (res.success) {
-        this.showToast(res.message, 'success');
-        this.loadExpenses();
-        this.loadDashboardData();
+      if (res && res.success) {
+        this.showToast(res.message || 'Records permanently deleted.', 'success');
         const selectAll = document.getElementById('selectAllExpenses');
         if (selectAll) selectAll.checked = false;
+        await Promise.all([
+          this.loadExpenses(),
+          this.loadDashboardData()
+        ]);
         this.updateBulkDeleteVisibility();
       } else {
-        this.showToast(res.message, 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+        this.showToast(res?.message || 'Unable to bulk delete records.', 'error');
       }
+    } catch (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+      this.showToast('Unable to bulk delete records. Please try again.', 'error');
     }
   },
 

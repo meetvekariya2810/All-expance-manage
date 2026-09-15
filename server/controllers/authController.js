@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const { getMongoStatus, memoryStore, saveLocalStore } = require('../config/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'smart_expense_super_secret_jwt_key_2026!';
 
@@ -12,17 +13,29 @@ const login = async (req, res) => {
     }
 
     const trimmedUsername = username.toLowerCase().trim();
-    const user = await User.findOne({ username: trimmedUsername });
+    let user = null;
+    let isMatch = false;
 
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid username or password.' });
+    if (getMongoStatus()) {
+      user = await User.findOne({ username: trimmedUsername });
+      if (!user) {
+        return res.status(401).json({ success: false, message: 'Invalid username or password.' });
+      }
+      if (user.status === 'disabled') {
+        return res.status(403).json({ success: false, message: 'Your account has been disabled by Admin.' });
+      }
+      isMatch = await user.matchPassword(password);
+    } else {
+      user = memoryStore.users.find(u => u.username && u.username.toLowerCase() === trimmedUsername);
+      if (!user) {
+        return res.status(401).json({ success: false, message: 'Invalid username or password.' });
+      }
+      if (user.status === 'disabled') {
+        return res.status(403).json({ success: false, message: 'Your account has been disabled by Admin.' });
+      }
+      isMatch = await bcrypt.compare(password, user.password);
     }
 
-    if (user.status === 'disabled') {
-      return res.status(403).json({ success: false, message: 'Your account has been disabled by Admin.' });
-    }
-
-    const isMatch = await user.matchPassword(password);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
@@ -66,9 +79,19 @@ const logout = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const userId = req.user.id;
-    const user = await User.findOne({ 
-      $or: [{ _id: userId }, { id: userId }, { username: req.user.username }] 
-    }).select('-password');
+    let user = null;
+
+    if (getMongoStatus()) {
+      user = await User.findOne({ 
+        $or: [{ _id: userId }, { id: userId }, { username: req.user.username }] 
+      }).select('-password');
+    } else {
+      const found = memoryStore.users.find(u => (u._id || u.id) === userId || u.username === req.user.username);
+      if (found) {
+        const { password, ...rest } = found;
+        user = rest;
+      }
+    }
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User profile not found.' });
@@ -111,18 +134,34 @@ const changePassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'New password must be at least 4 characters long.' });
     }
 
-    const user = await User.findOne({ $or: [{ _id: userId }, { id: userId }] });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
-    }
+    if (getMongoStatus()) {
+      const user = await User.findOne({ $or: [{ _id: userId }, { id: userId }] });
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found.' });
+      }
 
-    const isMatch = await user.matchPassword(oldPassword);
-    if (!isMatch) {
-      return res.status(400).json({ success: false, message: 'Incorrect current password.' });
-    }
+      const isMatch = await user.matchPassword(oldPassword);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: 'Incorrect current password.' });
+      }
 
-    user.password = newPassword;
-    await user.save();
+      user.password = newPassword;
+      await user.save();
+    } else {
+      const user = memoryStore.users.find(u => (u._id || u.id) === userId);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found.' });
+      }
+
+      const isMatch = await bcrypt.compare(oldPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: 'Incorrect current password.' });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(newPassword, salt);
+      saveLocalStore();
+    }
 
     res.json({ success: true, message: 'Password updated successfully.' });
   } catch (error) {
@@ -140,42 +179,76 @@ const updateProfile = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Name and email are required.' });
     }
 
-    const user = await User.findOne({ $or: [{ _id: userId }, { id: userId }] });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
+    if (getMongoStatus()) {
+      const user = await User.findOne({ $or: [{ _id: userId }, { id: userId }] });
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found.' });
+      }
+
+      // Check unique email conflict
+      const existing = await User.findOne({ 
+        email: email.toLowerCase().trim(), 
+        _id: { $ne: user._id } 
+      });
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Email address already in use by another account.' });
+      }
+
+      user.name = name.trim();
+      user.email = email.toLowerCase().trim();
+      if (mobile !== undefined) user.mobile = mobile.trim();
+      await user.save();
+
+      const userObj = user.toObject();
+      delete userObj.password;
+      res.json({ 
+        success: true, 
+        message: 'Profile updated successfully.', 
+        user: {
+          id: userObj._id,
+          _id: userObj._id,
+          name: userObj.name,
+          username: userObj.username,
+          email: userObj.email,
+          mobile: userObj.mobile,
+          role: userObj.role,
+          profile_image: userObj.profile_image,
+          status: userObj.status
+        } 
+      });
+    } else {
+      const idx = memoryStore.users.findIndex(u => (u._id || u.id) === userId);
+      if (idx === -1) {
+        return res.status(404).json({ success: false, message: 'User not found.' });
+      }
+
+      const existing = memoryStore.users.find(u => u.email === email.toLowerCase().trim() && (u._id || u.id) !== userId);
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Email address already in use by another account.' });
+      }
+
+      memoryStore.users[idx].name = name.trim();
+      memoryStore.users[idx].email = email.toLowerCase().trim();
+      if (mobile !== undefined) memoryStore.users[idx].mobile = mobile.trim();
+      saveLocalStore();
+
+      const { password, ...safeUser } = memoryStore.users[idx];
+      res.json({ 
+        success: true, 
+        message: 'Profile updated successfully.', 
+        user: {
+          id: safeUser._id || safeUser.id,
+          _id: safeUser._id || safeUser.id,
+          name: safeUser.name,
+          username: safeUser.username,
+          email: safeUser.email,
+          mobile: safeUser.mobile,
+          role: safeUser.role,
+          profile_image: safeUser.profile_image,
+          status: safeUser.status
+        }
+      });
     }
-
-    // Check unique email conflict
-    const existing = await User.findOne({ 
-      email: email.toLowerCase().trim(), 
-      _id: { $ne: user._id } 
-    });
-    if (existing) {
-      return res.status(400).json({ success: false, message: 'Email address already in use by another account.' });
-    }
-
-    user.name = name.trim();
-    user.email = email.toLowerCase().trim();
-    if (mobile !== undefined) user.mobile = mobile.trim();
-    await user.save();
-
-    const userObj = user.toObject();
-    delete userObj.password;
-    res.json({ 
-      success: true, 
-      message: 'Profile updated successfully.', 
-      user: {
-        id: userObj._id,
-        _id: userObj._id,
-        name: userObj.name,
-        username: userObj.username,
-        email: userObj.email,
-        mobile: userObj.mobile,
-        role: userObj.role,
-        profile_image: userObj.profile_image,
-        status: userObj.status
-      } 
-    });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ success: false, message: 'Error updating profile.' });

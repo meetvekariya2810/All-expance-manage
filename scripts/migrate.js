@@ -3,7 +3,7 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-const { connectDB } = require('../server/config/db');
+const { connectDB, isExpenseDeleted } = require('../server/config/db');
 const User = require('../server/models/User');
 const Expense = require('../server/models/Expense');
 const Category = require('../server/models/Category');
@@ -53,6 +53,7 @@ const runMigration = async () => {
   const rawExpenses = data.expenses || [];
   const rawCategories = data.categories || [];
   const rawBudgets = data.budgets || [];
+  const deletedExpenseIds = (data.deletedExpenseIds || []).map(String);
 
   console.log(`🔍 Detected in source: ${rawUsers.length} users, ${rawExpenses.length} expenses, ${rawCategories.length} categories, ${rawBudgets.length} budgets.`);
 
@@ -144,8 +145,13 @@ const runMigration = async () => {
     }
   }
 
-  // 5. Migrate Expenses (Preserve all 39 records)
+  // 5. Migrate Expenses (Preserve legitimate records, skip any deleted tombstones)
   for (const exp of rawExpenses) {
+    const expIds = [String(exp._id), String(exp.id), String(exp.expense_id)];
+    if (expIds.some(id => deletedExpenseIds.includes(id) || isExpenseDeleted(id))) {
+      continue;
+    }
+
     const existing = await Expense.findOne({
       $or: [
         { _id: exp._id },

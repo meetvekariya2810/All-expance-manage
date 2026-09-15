@@ -1,0 +1,10 @@
+.mongo_data/
+.mongo_data
+node_modules
+client/node_modules
+.env
+.env.local
+.env.*.local
+scratch/
+*.log
+.git

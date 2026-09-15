@@ -20,9 +20,11 @@ export default function ExpenseListPage() {
   const [category, setCategory] = useState('all');
   const [paymentMethod, setPaymentMethod] = useState('all');
   const [person, setPerson] = useState('all');
-  const [datePreset, setDatePreset] = useState('this_month');
+  const [datePreset, setDatePreset] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
   const [sortValue, setSortValue] = useState('date_desc');
 
   // Pagination & data states
@@ -37,6 +39,7 @@ export default function ExpenseListPage() {
 
   // Selection states for bulk actions
   const [selectedIds, setSelectedIds] = useState([]);
+  const [deletingId, setDeletingId] = useState(null);
 
   // Modals
   const [activeExpenseDetails, setActiveExpenseDetails] = useState(null);
@@ -89,44 +92,67 @@ export default function ExpenseListPage() {
 
   // Initialize date preset on mount
   useEffect(() => {
-    applyPreset('this_month');
-    categoryService.getCategories().then(res => {
-      if (res.success) setCategories(res.categories || []);
-    });
+    applyPreset('all');
   }, [applyPreset]);
 
-  // Fetch expenses
+  // Load available categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await categoryService.getCategories();
+        if (res.success && res.categories) {
+          setCategories(res.categories);
+        }
+      } catch (err) {
+        console.warn('Failed to load categories:', err);
+      }
+    };
+    fetchCategories();
+  }, []);
+
+  // Fetch expense list
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
     try {
-      const sortOpt = SORT_OPTIONS.find(s => s.value === sortValue) || SORT_OPTIONS[0];
+      const sortMap = {
+        date_desc: { sortBy: 'expense_date', sortOrder: 'desc' },
+        date_asc: { sortBy: 'expense_date', sortOrder: 'asc' },
+        amount_desc: { sortBy: 'amount', sortOrder: 'desc' },
+        amount_asc: { sortBy: 'amount', sortOrder: 'asc' },
+        title_asc: { sortBy: 'title', sortOrder: 'asc' },
+        category_asc: { sortBy: 'category', sortOrder: 'asc' }
+      };
+      const { sortBy, sortOrder } = sortMap[sortValue] || sortMap.date_desc;
+
       const params = {
         page,
         limit,
-        sortBy: sortOpt.sortBy,
-        sortOrder: sortOpt.sortOrder
+        sortBy,
+        sortOrder,
+        search: search.trim() || undefined,
+        category: category !== 'all' ? category : undefined,
+        payment_method: paymentMethod !== 'all' ? paymentMethod : undefined,
+        person: isAdmin && person !== 'all' ? person : undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        minAmount: minAmount || undefined,
+        maxAmount: maxAmount || undefined
       };
 
-      if (search.trim()) params.search = search.trim();
-      if (category !== 'all') params.category = category;
-      if (paymentMethod !== 'all') params.payment_method = paymentMethod;
-      if (isAdmin && person !== 'all') params.person = person;
-      if (startDate) params.startDate = startDate;
-      if (endDate) params.endDate = endDate;
-
-      const data = await expenseService.getExpenses(params);
-      if (data.success) {
-        setExpenses(data.expenses || []);
-        setTotalRecords(data.total || 0);
-        setTotalPages(data.totalPages || 1);
-        setPageSum(data.sum || 0);
+      const res = await expenseService.getExpenses(params);
+      if (res.success) {
+        setExpenses(res.expenses || []);
+        setTotalRecords(res.total || 0);
+        setTotalPages(res.totalPages || 1);
+        setPageSum(res.sum !== undefined ? res.sum : (res.expenses || []).reduce((acc, exp) => acc + (parseFloat(exp.amount) || 0), 0));
       }
     } catch (err) {
-      showToast('Error loading expenses: ' + (err.response?.data?.message || err.message), 'error');
+      console.error('Error fetching expenses:', err);
+      showToast('Error loading expense data.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, category, paymentMethod, person, startDate, endDate, sortValue, isAdmin, showToast]);
+  }, [page, limit, sortValue, search, category, paymentMethod, person, startDate, endDate, minAmount, maxAmount, isAdmin, showToast]);
 
   useEffect(() => {
     fetchExpenses();
@@ -136,26 +162,30 @@ export default function ExpenseListPage() {
     return () => window.removeEventListener('app:refresh', handleRefresh);
   }, [fetchExpenses]);
 
-  // Debounced search handler
-  const handleSearchChange = (val) => {
+  // Debounced search input handler
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
     setSearch(val);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => {
       setPage(1);
-    }, 400);
+    }, 350);
   };
 
+  // Reset all filters
   const handleResetFilters = () => {
     setSearch('');
     setCategory('all');
     setPaymentMethod('all');
     setPerson('all');
+    setMinAmount('');
+    setMaxAmount('');
     setSortValue('date_desc');
-    applyPreset('this_month');
+    applyPreset('all');
     setSelectedIds([]);
   };
 
-  // Row selection
+  // Bulk selection toggles
   const toggleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedIds(expenses.map(exp => exp.id || exp._id));
@@ -165,8 +195,9 @@ export default function ExpenseListPage() {
   };
 
   const getUserBadgeColor = (userName) => {
-    const name = (userName || '').toLowerCase();
-    if (name.includes('bhavik')) return 'badge bg-primary text-white';
+    if (!userName) return 'badge bg-secondary text-white';
+    const name = userName.toLowerCase();
+    if (name.includes('bhavik') || name.includes('admin')) return 'badge bg-primary text-white';
     if (name.includes('meet')) return 'badge bg-success text-white';
     if (name.includes('harsh')) return 'badge bg-warning text-dark';
     return 'badge bg-secondary text-white';
@@ -180,41 +211,60 @@ export default function ExpenseListPage() {
 
   // Single Delete
   const handleDelete = async (exp) => {
-    if (!window.confirm(`Are you sure you want to delete "${exp.title}"?`)) return;
+    const id = exp._id || exp.id;
+    if (!id) return;
+    const confirmMsg = `Delete Expense?\n\nThis action permanently deletes "${exp.title}" (₹${(parseFloat(exp.amount) || 0).toLocaleString('en-IN')}) from the database.\nIt cannot be recovered.\n\nClick OK to confirm permanent deletion.`;
+    if (!window.confirm(confirmMsg)) return;
+
     try {
-      await expenseService.deleteExpense(exp.id || exp._id);
-      showToast('Expense record deleted.', 'success');
+      setDeletingId(id);
+      const res = await expenseService.deleteExpense(id);
+      showToast(res?.message || 'Expense permanently deleted.', 'success');
       setActiveExpenseDetails(null);
-      fetchExpenses();
+      await fetchExpenses();
     } catch (err) {
-      showToast('Failed to delete expense.', 'error');
+      showToast(err?.response?.data?.message || 'Failed to delete expense. Please try again.', 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
   // Bulk Delete
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to permanently delete ${selectedIds.length} selected expenses?`)) return;
+    const confirmMsg = `Delete ${selectedIds.length} Expense Record(s)?\n\nThis action permanently deletes these ${selectedIds.length} records from the database.\nIt cannot be recovered.\n\nClick OK to confirm permanent deletion.`;
+    if (!window.confirm(confirmMsg)) return;
+
     try {
+      setDeletingId('bulk');
       const res = await expenseService.bulkDeleteExpenses(selectedIds);
       showToast(res.message || 'Records deleted successfully.', 'success');
       setSelectedIds([]);
-      fetchExpenses();
+      await fetchExpenses();
     } catch (err) {
-      showToast('Error during bulk deletion.', 'error');
+      showToast(err?.response?.data?.message || 'Error during bulk deletion.', 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
   // Erase All
   const handleEraseAll = async () => {
-    if (!window.confirm('WARNING: Are you sure you want to erase ALL matching expense records? This cannot be undone!')) return;
+    const confirmMsg = isAdmin
+      ? '⚠️ PERMANENT ERASE: Are you sure you want to permanently delete ALL matching expense records in the database? This cannot be undone!'
+      : '⚠️ PERMANENT ERASE: Are you sure you want to permanently delete ALL of your expense records in the database? This cannot be undone!';
+    if (!window.confirm(confirmMsg)) return;
+
     try {
+      setDeletingId('erase');
       const res = await expenseService.clearAllExpenses(person);
       showToast(res.message || 'All records cleared.', 'success');
       setSelectedIds([]);
-      fetchExpenses();
+      await fetchExpenses();
     } catch (err) {
-      showToast('Error clearing records.', 'error');
+      showToast(err?.response?.data?.message || 'Error clearing records.', 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -561,9 +611,14 @@ export default function ExpenseListPage() {
                             type="button"
                             className="btn btn-sm btn-outline-danger py-1 px-2"
                             title="Delete Record"
+                            disabled={deletingId === expId}
                             onClick={() => handleDelete(item)}
                           >
-                            <i className="fa-solid fa-trash"></i>
+                            {deletingId === expId ? (
+                              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            ) : (
+                              <i className="fa-solid fa-trash"></i>
+                            )}
                           </button>
                         </div>
                       </td>

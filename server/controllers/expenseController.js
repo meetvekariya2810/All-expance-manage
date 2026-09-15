@@ -1,6 +1,7 @@
 const Expense = require('../models/Expense');
 const User = require('../models/User');
 const ActivityLog = require('../models/ActivityLog');
+const { syncExpenseStore, recordDeletedExpenseId } = require('../config/db');
 const fs = require('fs');
 const path = require('path');
 
@@ -244,6 +245,9 @@ const createExpense = async (req, res) => {
 
     await newExpense.save();
 
+    // Synchronize disk and memory snapshot
+    syncExpenseStore('create', newExpense);
+
     // Log user activity
     await ActivityLog.create({
       user_id: targetUserId,
@@ -321,6 +325,9 @@ const updateExpense = async (req, res) => {
     expense.updated_at = new Date();
     await expense.save();
 
+    // Synchronize disk and memory snapshot
+    syncExpenseStore('update', expense);
+
     // Log update activity
     await ActivityLog.create({
       user_id: req.user.id,
@@ -356,6 +363,7 @@ const deleteExpense = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Expense record not found.' });
     }
 
+    // Role check: Only admin or the owner can delete
     if (role !== 'admin' && expense.user_id !== userId && expense.user_id !== username) {
       return res.status(403).json({ success: false, message: 'Unauthorized to delete this record.' });
     }
@@ -368,25 +376,42 @@ const deleteExpense = async (req, res) => {
       }
     }
 
-    await Expense.deleteOne({ _id: expense._id });
+    const expMongoId = expense._id;
+    const expCustomId = expense.id;
+    const expCode = expense.expense_id;
 
-    // Log delete activity
+    // Permanent delete from MongoDB
+    await Expense.deleteOne({
+      $or: [
+        { _id: expMongoId },
+        { id: expCustomId || expMongoId },
+        { expense_id: expCode || expMongoId }
+      ]
+    });
+
+    // Permanent delete from snapshot store + record tombstones
+    syncExpenseStore('delete', expMongoId);
+    if (expCustomId) recordDeletedExpenseId(expCustomId);
+    if (expCode) recordDeletedExpenseId(expCode);
+
+    // Log delete activity in ActivityLog (never brings back the deleted expense)
     await ActivityLog.create({
       user_id: req.user.id,
       user_name: req.user.name,
       action: 'Expense Deleted',
-      expense_id: expense.expense_id,
+      expense_id: expense.expense_id || String(expMongoId),
       amount: expense.amount,
       category: expense.category,
       title: expense.title,
-      details: `${req.user.name} deleted expense '${expense.title}' (₹${expense.amount.toLocaleString('en-IN')})`,
+      details: `${req.user.name} permanently deleted expense '${expense.title}' (₹${(parseFloat(expense.amount) || 0).toLocaleString('en-IN')})`,
       type: 'delete',
       timestamp: new Date()
     }).catch(err => console.warn('ActivityLog delete notice:', err.message));
 
-    res.json({ success: true, message: 'Expense deleted successfully.' });
+    return res.json({ success: true, message: 'Expense deleted successfully.' });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error deleting expense.' });
+    console.error('Delete expense error:', error);
+    return res.status(500).json({ success: false, message: 'Error deleting expense.' });
   }
 };
 
@@ -413,25 +438,38 @@ const bulkDeleteExpenses = async (req, res) => {
       };
     }
 
+    // Identify docs to be removed to capture all identifiers for tombstone tracking
+    const docsToDelete = await Expense.find(deleteFilter).select('_id id expense_id');
+    const allIdsToDelete = [];
+    docsToDelete.forEach(d => {
+      if (d._id) allIdsToDelete.push(String(d._id));
+      if (d.id) allIdsToDelete.push(String(d.id));
+      if (d.expense_id) allIdsToDelete.push(String(d.expense_id));
+    });
+
     const result = await Expense.deleteMany(deleteFilter);
+
+    // Sync snapshot store
+    syncExpenseStore('bulk_delete', allIdsToDelete.length ? allIdsToDelete : ids);
 
     // Log bulk delete activity
     await ActivityLog.create({
       user_id: req.user.id,
       user_name: req.user.name,
       action: 'Bulk Expenses Deleted',
-      details: `${req.user.name} bulk deleted ${result.deletedCount} expense records`,
+      details: `${req.user.name} permanently bulk deleted ${result.deletedCount} expense records`,
       type: 'delete',
       timestamp: new Date()
     }).catch(err => console.warn('ActivityLog bulk delete notice:', err.message));
 
-    res.json({
+    return res.json({
       success: true,
       message: `Successfully deleted ${result.deletedCount} expense records.`,
       deletedCount: result.deletedCount
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error executing bulk deletion.' });
+    console.error('Bulk delete error:', error);
+    return res.status(500).json({ success: false, message: 'Error executing bulk deletion.' });
   }
 };
 
@@ -455,15 +493,28 @@ const clearAllExpenses = async (req, res) => {
       }
     }
 
+    const docs = await Expense.find(filter).select('_id id expense_id');
     const result = await Expense.deleteMany(filter);
 
-    res.json({
+    syncExpenseStore('clear', docs);
+
+    await ActivityLog.create({
+      user_id: req.user.id,
+      user_name: req.user.name,
+      action: 'Expenses Cleared',
+      details: `${req.user.name} permanently cleared ${result.deletedCount} expense records`,
+      type: 'delete',
+      timestamp: new Date()
+    }).catch(err => console.warn('ActivityLog clear notice:', err.message));
+
+    return res.json({
       success: true,
       message: `Cleared all matching expense records (${result.deletedCount} items).`,
       deletedCount: result.deletedCount
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error clearing expenses.' });
+    console.error('Clear expenses error:', error);
+    return res.status(500).json({ success: false, message: 'Error clearing expenses.' });
   }
 };
 

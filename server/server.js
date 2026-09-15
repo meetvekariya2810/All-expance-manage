@@ -27,23 +27,36 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Ensure database connection middleware for API routes
+// Database connection assurance middleware for API routes
 app.use('/api', async (req, res, next) => {
-  try {
-    await connectDB();
-  } catch (err) {
-    console.error('Database connection error during API request:', err.message);
+  if (req.path === '/health') return next();
+
+  if (!getMongoStatus()) {
+    try {
+      await connectDB();
+    } catch (err) {
+      console.error('Database connection error during API request:', err.message);
+    }
+  }
+
+  if (!getMongoStatus()) {
+    return res.status(503).json({
+      success: false,
+      message: 'MongoDB Atlas connection failed. Please check MONGODB_URI and Atlas network access.',
+      database: 'unavailable'
+    });
   }
   next();
 });
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({
+  const isConnected = getMongoStatus();
+  res.status(isConnected ? 200 : 503).json({
     status: 'online',
     system: 'Smart Personal Expense Management System',
     architecture: 'MERN Stack (MongoDB + Express + React + Node.js)',
-    database: getMongoStatus() ? 'connected_authoritative' : 'connecting',
+    database: isConnected ? 'connected' : 'unavailable',
     timestamp: new Date()
   });
 });

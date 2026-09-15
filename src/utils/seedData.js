@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-const { connectDB, getMongoStatus, memoryStore, saveLocalStore } = require('../config/db');
+const { connectDB, getMongoStatus, isExpenseDeleted } = require('../config/db');
 const User = require('../models/User');
 const Expense = require('../models/Expense');
 const Category = require('../models/Category');
@@ -144,9 +144,15 @@ const seedData = async () => {
         }
       }
 
-      // 3. Seed Expenses idempotently
+      // 3. Seed Expenses idempotently (never resurrect deleted records)
+      const deletedIds = (seedStore.deletedExpenseIds || []).map(String);
       let seededExpCount = 0;
       for (const exp of expensesToSeed) {
+        const expIds = [String(exp._id), String(exp.id), String(exp.expense_id)];
+        if (expIds.some(id => deletedIds.includes(id) || isExpenseDeleted(id))) {
+          continue;
+        }
+
         const expId = exp.expense_id || exp._id;
         const exists = await Expense.findOne({ $or: [{ expense_id: expId }, { _id: exp._id }] });
         if (!exists) {

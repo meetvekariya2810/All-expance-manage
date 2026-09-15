@@ -171,31 +171,76 @@ const getSummaryMetrics = async (req, res) => {
     const remainingBudget = Math.max(0, monthlyBudget - monthlySpending);
     const budgetPercent = monthlyBudget > 0 ? Math.min(100, Math.round((monthlySpending / monthlyBudget) * 100)) : 0;
 
-    // Recent 10 transactions
+    // Recent transactions for dashboard preview
     const recentTransactions = allExpenses.slice(0, 10);
+
+    // User summaries for admin table
+    const userSummaries = [];
+    if (role === 'admin') {
+      const allUsers = await User.find({});
+      allUsers.forEach(u => {
+        const uExpenses = allExpenses.filter(e => e.user_id === u._id || e.user_id === u.id || e.user_id === u.username);
+        const uTotal = uExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+        const uMonthly = uExpenses.filter(e => e.expense_date && e.expense_date.startsWith(currentMonthStr))
+                                  .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+        const uAvg = uExpenses.length > 0 ? (uTotal / uExpenses.length) : 0;
+        const uHigh = uExpenses.length > 0 ? Math.max(...uExpenses.map(e => parseFloat(e.amount) || 0)) : 0;
+        const lastExp = uExpenses.length > 0 ? uExpenses[0].expense_date : 'N/A';
+        userSummaries.push({
+          user_id: u._id || u.id,
+          name: u.name,
+          username: u.username,
+          totalTransactions: uExpenses.length,
+          currentMonthAmount: uMonthly,
+          totalAmount: uTotal,
+          averageExpense: uAvg,
+          highestExpense: uHigh,
+          lastExpenseDate: lastExp
+        });
+      });
+    }
+
+    const budgetStatus = monthlyBudget > 0 
+      ? (monthlySpending > monthlyBudget ? 'Over Budget' : (monthlySpending >= monthlyBudget * 0.9 ? 'Near Limit' : 'Within Budget'))
+      : 'Not Set';
+
+    const summaryData = {
+      totalExpense: totalSpending,
+      totalSpending,
+      totalTransactions,
+      monthlyExpense: monthlySpending,
+      monthlySpending,
+      todayExpense: todaySpending,
+      todaySpending,
+      averageExpense: averageSpending,
+      averageSpending,
+      highestExpense,
+      lowestExpense,
+      budgetAmount: monthlyBudget,
+      monthlyBudget,
+      remainingBudget,
+      budgetUsagePercent: budgetPercent,
+      budgetPercent,
+      budgetStatus,
+      isBudgetExceeded: monthlyBudget > 0 && monthlySpending > monthlyBudget,
+      isBudgetWarning: monthlyBudget > 0 && monthlySpending >= monthlyBudget * 0.9,
+      categoryTotals: categoryBreakdown,
+      categoryBreakdown,
+      monthlyTrend,
+      paymentTotals: paymentMethodBreakdown,
+      paymentMethodBreakdown,
+      dailyTrend: dailySpending,
+      dailySpending,
+      userTotals: userComparison,
+      userComparison,
+      userSummaries,
+      recentTransactions
+    };
 
     res.json({
       success: true,
-      metrics: {
-        totalSpending,
-        totalTransactions,
-        monthlySpending,
-        todaySpending,
-        averageSpending,
-        highestExpense,
-        lowestExpense,
-        monthlyBudget,
-        remainingBudget,
-        budgetPercent,
-        isBudgetExceeded: monthlyBudget > 0 && monthlySpending > monthlyBudget,
-        isBudgetWarning: monthlyBudget > 0 && monthlySpending >= monthlyBudget * 0.9,
-        categoryBreakdown,
-        monthlyTrend,
-        paymentMethodBreakdown,
-        dailySpending,
-        userComparison,
-        recentTransactions
-      }
+      summary: summaryData,
+      metrics: summaryData
     });
   } catch (error) {
     console.error('Error in getSummaryMetrics:', error);
