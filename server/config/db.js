@@ -18,31 +18,34 @@ if (!cached) {
   cached = global.mongooseCache = { conn: null, promise: null };
 }
 
-// Persistent tombstone tracking for deleted expenses
+// Persistent tombstone tracking for deleted expenses (safely handles serverless read-only filesystems)
 const TOMBSTONE_FILE = path.join(__dirname, '../../.deleted_expenses.json');
+const inMemoryDeletedIds = new Set();
 
 const loadDeletedIds = () => {
+  const ids = new Set(inMemoryDeletedIds);
   try {
     if (fs.existsSync(TOMBSTONE_FILE)) {
       const raw = fs.readFileSync(TOMBSTONE_FILE, 'utf8');
       const list = JSON.parse(raw);
-      if (Array.isArray(list)) return list.map(String);
+      if (Array.isArray(list)) list.forEach(id => ids.add(String(id)));
     }
   } catch (e) {}
-  return [];
+  return Array.from(ids);
 };
 
 const recordDeletedExpenseId = (id) => {
   if (!id) return;
+  const idStr = String(id);
+  inMemoryDeletedIds.add(idStr);
   try {
     const list = loadDeletedIds();
-    const idStr = String(id);
     if (!list.includes(idStr)) {
       list.push(idStr);
-      fs.writeFileSync(TOMBSTONE_FILE, JSON.stringify(list, null, 2), 'utf8');
     }
+    fs.writeFileSync(TOMBSTONE_FILE, JSON.stringify(list, null, 2), 'utf8');
   } catch (e) {
-    console.warn('Tombstone save notice:', e.message);
+    // Read-only filesystem in serverless environments is expected; in-memory set will retain tombstones
   }
 };
 
@@ -165,68 +168,169 @@ mongoose.connection.on('disconnected', () => {
   console.warn('⚠️ MongoDB disconnected.');
 });
 
+const sanitizeUri = (raw) => {
+  if (!raw || typeof raw !== 'string') return '';
+  let uri = raw.trim();
+  // Strip enclosing double or single quotes
+  if ((uri.startsWith('"') && uri.endsWith('"')) || (uri.startsWith("'") && uri.endsWith("'"))) {
+    uri = uri.slice(1, -1).trim();
+  }
+  return uri;
+};
+
+const maskUri = (uri) => {
+  if (!uri || typeof uri !== 'string') return '';
+  return uri.replace(/:([^@]+)@/, ':****@');
+};
+
+let connectionDiagnostic = {
+  configured: false,
+  uriType: 'none',
+  status: 'disconnected',
+  reason: '',
+  lastChecked: null
+};
+
+const getDiagnosticInfo = () => ({
+  ...connectionDiagnostic,
+  isConnected: isMongoConnected && mongoose.connection.readyState === 1,
+  readyState: mongoose.connection.readyState
+});
+
 /**
  * Connect to MongoDB (Atlas as Primary Source of Truth)
  * Reads process.env.MONGODB_URI.
  * Connects once and re-uses connection across invocations.
  */
 const connectDB = async () => {
+  connectionDiagnostic.lastChecked = new Date();
+
   if (cached.conn && mongoose.connection.readyState === 1) {
     isMongoConnected = true;
+    connectionDiagnostic.status = 'connected';
     return cached.conn;
   }
 
-  const connUri = (process.env.MONGODB_URI || '').trim();
-  const isRemoteUri = connUri.startsWith('mongodb+srv://') || 
-    (connUri.startsWith('mongodb://') && !connUri.includes('127.0.0.1') && !connUri.includes('localhost'));
+  const isServerless = !!(process.env.VERCEL || process.env.NOW_BUILDER || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const rawUri = process.env.MONGODB_URI;
+  const connUri = sanitizeUri(rawUri);
 
-  // 1. Remote MongoDB Atlas Connection
+  // 1. Missing URI check
+  if (!connUri) {
+    connectionDiagnostic = {
+      configured: false,
+      uriType: 'none',
+      status: 'missing_uri',
+      reason: 'MONGODB_URI is not defined in environment variables',
+      lastChecked: new Date()
+    };
+    if (isServerless || process.env.NODE_ENV === 'production') {
+      isMongoConnected = false;
+      console.error('❌ MONGODB_URI is missing or empty in Vercel environment variables.');
+      console.error('👉 Please configure MONGODB_URI in Vercel Dashboard -> Settings -> Environment Variables.');
+      return null;
+    }
+  }
+
+  // 2. Unreplaced placeholder check (<...> brackets)
+  if (connUri && (connUri.includes('<') || connUri.includes('>'))) {
+    connectionDiagnostic = {
+      configured: true,
+      uriType: 'placeholder',
+      status: 'placeholder_detected',
+      reason: 'MONGODB_URI contains unreplaced placeholder brackets (< or >)',
+      lastChecked: new Date()
+    };
+    isMongoConnected = false;
+    console.error('❌ MONGODB_URI contains unreplaced placeholder brackets (< or >).');
+    console.error('👉 Please replace placeholder brackets like <password> with your real MongoDB Atlas credentials in Vercel.');
+    return null;
+  }
+
+  // 3. Local URI check in production / serverless
+  const isLocalUri = connUri && (connUri.includes('127.0.0.1') || connUri.includes('localhost'));
+  if (isLocalUri && (isServerless || process.env.NODE_ENV === 'production')) {
+    connectionDiagnostic = {
+      configured: true,
+      uriType: 'localhost',
+      status: 'local_in_production',
+      reason: 'Local MongoDB URI (127.0.0.1/localhost) configured in production Vercel deployment',
+      lastChecked: new Date()
+    };
+    isMongoConnected = false;
+    console.error('❌ Invalid MONGODB_URI in Vercel production: local URI (127.0.0.1/localhost) detected.');
+    console.error('👉 Vercel serverless functions cannot connect to localhost. Please use a MongoDB Atlas connection string (mongodb+srv://...).');
+    return null;
+  }
+
+  const isRemoteUri = connUri && (connUri.startsWith('mongodb+srv://') || connUri.startsWith('mongodb://')) && !isLocalUri;
+
+  // 4. Remote MongoDB Atlas Connection
   if (isRemoteUri) {
+    connectionDiagnostic.configured = true;
+    connectionDiagnostic.uriType = connUri.startsWith('mongodb+srv://') ? 'mongodb+srv' : 'mongodb';
+
     try {
       if (!cached.promise) {
         cached.promise = mongoose.connect(connUri, {
-          serverSelectionTimeoutMS: 5000,
-          connectTimeoutMS: 5000,
+          serverSelectionTimeoutMS: 8000,
+          connectTimeoutMS: 8000,
           bufferCommands: false
         }).then((m) => m);
       }
       cached.conn = await cached.promise;
       isMongoConnected = true;
-      const maskedUri = connUri.replace(/:([^@]+)@/, ':****@');
+      connectionDiagnostic.status = 'connected';
+      connectionDiagnostic.reason = 'Connected successfully';
+      const maskedUri = maskUri(connUri);
       console.log(`✅ MongoDB connected successfully to authoritative database [${maskedUri}]`);
       await ensureInitialData();
       return cached.conn;
     } catch (err) {
       cached.promise = null;
       isMongoConnected = false;
+      connectionDiagnostic.status = 'connection_failed';
+      connectionDiagnostic.reason = err.message;
+
       console.error('❌ MongoDB Atlas connection failed.');
-      console.error(`   Error details: ${err.message}`);
-      console.error('   Please check MONGODB_URI, Atlas user credentials, and Network Access (IP Whitelist).');
+      console.error(`   Error Name: ${err.name}`);
+      console.error(`   Error Message: ${err.message}`);
+      const maskedUri = maskUri(connUri);
+      console.error(`   Target URI: ${maskedUri}`);
+
+      if (err.message.includes('bad auth') || err.message.includes('Authentication failed')) {
+        console.error('   👉 Diagnostic Hint: Authentication failed. Please verify the Atlas database username and password in Vercel MONGODB_URI.');
+      } else if (err.message.includes('querySrv') || err.message.includes('ENOTFOUND')) {
+        console.error('   👉 Diagnostic Hint: Cluster host not found. Please verify the cluster domain name in Vercel MONGODB_URI.');
+      } else if (err.message.includes('timed out') || err.message.includes('selection timed out')) {
+        console.error('   👉 Diagnostic Hint: Connection timed out. Ensure MongoDB Atlas -> Network Access allows 0.0.0.0/0 (Allow access from anywhere).');
+      }
       return null;
     }
   }
 
-  // 2. In serverless (Vercel) or production without remote URI -> fail cleanly without crashing
-  const isServerless = !!(process.env.VERCEL || process.env.NOW_BUILDER || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  // 5. In serverless or production without valid remote URI -> fail cleanly
   if (isServerless || process.env.NODE_ENV === 'production') {
     isMongoConnected = false;
-    console.error('❌ MONGODB_URI is required in Vercel environment variables.');
+    connectionDiagnostic.status = 'invalid_production_uri';
+    connectionDiagnostic.reason = 'A valid MongoDB Atlas URI (mongodb+srv://...) is required in Vercel production';
+    console.error('❌ A valid MongoDB Atlas URI (mongodb+srv://...) is required in Vercel environment variables.');
     return null;
   }
 
-  // 3. Local Development Mode
+  // 6. Local Development Mode (Offline fallback / Embedded dev DB)
   try {
-    // If user provided a local URI, attempt connection
-    if (connUri && (connUri.includes('127.0.0.1') || connUri.includes('localhost'))) {
+    if (connUri && isLocalUri) {
       try {
         if (!cached.promise) {
           cached.promise = mongoose.connect(connUri, {
-            serverSelectionTimeoutMS: 1500,
+            serverSelectionTimeoutMS: 2000,
             bufferCommands: false
           }).then(m => m);
         }
         cached.conn = await cached.promise;
         isMongoConnected = true;
+        connectionDiagnostic.status = 'connected';
         console.log(`✅ Connected to local MongoDB instance: ${connUri}`);
         await ensureInitialData();
         return cached.conn;
@@ -235,7 +339,6 @@ const connectDB = async () => {
       }
     }
 
-    // Local persistent embedded MongoDB instance for offline development
     let MongoMemoryServer;
     try {
       MongoMemoryServer = require('mongodb-memory-server').MongoMemoryServer;
@@ -267,12 +370,15 @@ const connectDB = async () => {
     }
     cached.conn = await cached.promise;
     isMongoConnected = true;
+    connectionDiagnostic.status = 'connected';
     console.log('✅ Development MongoDB engine connected successfully.');
     await ensureInitialData();
     return cached.conn;
   } catch (devErr) {
     cached.promise = null;
     isMongoConnected = false;
+    connectionDiagnostic.status = 'connection_failed';
+    connectionDiagnostic.reason = devErr.message;
     console.error('❌ Development database initialization failed:', devErr.message);
     return null;
   }
@@ -295,6 +401,9 @@ const syncExpenseStore = (action, payload) => {
 module.exports = {
   connectDB,
   getMongoStatus,
+  getDiagnosticInfo,
+  sanitizeUri,
+  maskUri,
   ensureInitialData,
   isExpenseDeleted,
   recordDeletedExpenseId,

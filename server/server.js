@@ -6,7 +6,7 @@ const dotenv = require('dotenv');
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-const { connectDB, getMongoStatus } = require('./config/db');
+const { connectDB, getMongoStatus, getDiagnosticInfo } = require('./config/db');
 
 const authRoutes = require('./routes/authRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
@@ -40,23 +40,50 @@ app.use('/api', async (req, res, next) => {
   }
 
   if (!getMongoStatus()) {
+    const diagnostic = getDiagnosticInfo();
     return res.status(503).json({
       success: false,
       message: 'MongoDB Atlas connection failed. Please check MONGODB_URI and Atlas network access.',
-      database: 'unavailable'
+      database: 'unavailable',
+      reason: diagnostic.reason || 'Database connection offline'
     });
   }
   next();
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+// Health check endpoint (Item 11 specification)
+app.get('/api/health', async (req, res) => {
+  if (!getMongoStatus()) {
+    try {
+      await connectDB();
+    } catch (err) {
+      console.error('Health check DB connection attempt error:', err.message);
+    }
+  }
+
   const isConnected = getMongoStatus();
-  res.status(isConnected ? 200 : 503).json({
-    status: 'online',
+  const diagnostic = getDiagnosticInfo();
+
+  if (isConnected) {
+    return res.status(200).json({
+      status: 'online',
+      database: 'connected',
+      system: 'Smart Personal Expense Management System',
+      architecture: 'MERN Stack (MongoDB + Express + React + Node.js)',
+      timestamp: new Date()
+    });
+  }
+
+  return res.status(503).json({
+    status: 'degraded',
+    database: 'disconnected',
     system: 'Smart Personal Expense Management System',
     architecture: 'MERN Stack (MongoDB + Express + React + Node.js)',
-    database: isConnected ? 'connected' : 'unavailable',
+    diagnostics: {
+      configured: diagnostic.configured,
+      uriType: diagnostic.uriType,
+      reason: diagnostic.reason || 'Database unavailable'
+    },
     timestamp: new Date()
   });
 });
