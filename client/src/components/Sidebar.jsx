@@ -68,6 +68,24 @@ export default function Sidebar({ isMobileOpen, closeMobileMenu }) {
             <span>{isAdmin ? 'All Expense History' : 'My Expense History'}</span>
           </NavLink>
 
+          <NavLink
+            to="/funds"
+            className={({ isActive }) => `nav-link-custom ${isActive ? 'active' : ''}`}
+            onClick={closeMobileMenu}
+          >
+            <i className="fa-solid fa-vault text-success"></i>
+            <span>Funds / Money In</span>
+          </NavLink>
+
+          <NavLink
+            to="/settlements"
+            className={({ isActive }) => `nav-link-custom ${isActive ? 'active' : ''}`}
+            onClick={closeMobileMenu}
+          >
+            <i className="fa-solid fa-scale-balanced text-primary"></i>
+            <span>Settle Up</span>
+          </NavLink>
+
           {/* Admin Monitoring Center */}
           {isAdmin && (
             <NavLink

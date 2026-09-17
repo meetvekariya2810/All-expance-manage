@@ -247,6 +247,8 @@ const App = {
 
     if (viewId === 'dashboard') this.loadDashboardData();
     if (viewId === 'expense-list') this.loadExpenses();
+    if (viewId === 'funds') this.loadFunds();
+    if (viewId === 'settlements') this.loadSettlements();
     if (viewId === 'reports') this.loadReportsData();
     if (viewId === 'budget') this.loadBudgetData();
     if (viewId === 'categories' && Auth.isAdmin()) this.loadCategoriesManager();
@@ -527,6 +529,38 @@ const App = {
       // 10 KPI Overview Stats
       const totalExpEl = document.getElementById('statTotalExpense');
       if (totalExpEl) totalExpEl.textContent = this.formatINR(s.totalExpense);
+
+      // Primary Core Financial Cards
+      const totalFundsEl = document.getElementById('statTotalFunds');
+      if (totalFundsEl) totalFundsEl.textContent = `+${this.formatINR(s.totalFunds || 0)}`;
+
+      const fundsTxEl = document.getElementById('statFundTransactionsCount');
+      if (fundsTxEl) fundsTxEl.textContent = (s.totalFundTransactions || 0).toLocaleString('en-IN');
+
+      const primaryExpEl = document.getElementById('statPrimaryTotalExpense');
+      if (primaryExpEl) primaryExpEl.textContent = `-${this.formatINR(s.totalExpense || 0)}`;
+
+      const primaryExpCountEl = document.getElementById('statPrimaryExpenseCount');
+      if (primaryExpCountEl) primaryExpCountEl.textContent = (s.totalTransactions || 0).toLocaleString('en-IN');
+
+      const availBalEl = document.getElementById('statAvailableBalance');
+      if (availBalEl) {
+        availBalEl.textContent = this.formatINR(s.availableBalance || 0);
+        availBalEl.style.color = (s.availableBalance || 0) >= 0 ? '#3b82f6' : '#ef4444';
+      }
+
+      // Settle Up Card Widget
+      const settleFundsEl = document.getElementById('statSettleFunds');
+      if (settleFundsEl) settleFundsEl.textContent = `+${this.formatINR(s.totalFunds || 0)}`;
+
+      const settleExpEl = document.getElementById('statSettleExpenses');
+      if (settleExpEl) settleExpEl.textContent = `-${this.formatINR(s.totalExpense || 0)}`;
+
+      const settleBalEl = document.getElementById('statSettleBalance');
+      if (settleBalEl) settleBalEl.textContent = this.formatINR(s.availableBalance || 0);
+
+      const settlePendingEl = document.getElementById('statSettlePending');
+      if (settlePendingEl) settlePendingEl.textContent = this.formatINR(s.settlements?.pendingAmount || 0);
 
       const txEl = document.getElementById('statTotalTransactions') || document.getElementById('statTotalCount');
       if (txEl) txEl.textContent = (s.totalTransactions || 0).toLocaleString('en-IN');
@@ -1524,6 +1558,398 @@ const App = {
       document.getElementById('changePasswordForm').reset();
     } else {
       this.showToast(res.message, 'error');
+    }
+  },
+
+  // ==========================================================================
+  // FUNDS / MONEY IN ENGINE
+  // ==========================================================================
+  allFundsCache: [],
+
+  openAddFundModal(fund = null) {
+    const editIdEl = document.getElementById('fundEditId');
+    const amtEl = document.getElementById('fundAmountInput');
+    const personEl = document.getElementById('fundPersonInput');
+    const dateEl = document.getElementById('fundDateInput');
+    const notesEl = document.getElementById('fundNotesInput');
+    const titleEl = document.getElementById('fundModalTitle');
+    const submitBtn = document.getElementById('fundSubmitBtn');
+
+    if (fund) {
+      if (editIdEl) editIdEl.value = fund._id || fund.id || fund.fund_id;
+      if (amtEl) amtEl.value = fund.amount || '';
+      if (personEl) personEl.value = fund.person_name || '';
+      if (dateEl) dateEl.value = fund.fund_date || new Date().toISOString().slice(0, 10);
+      if (notesEl) notesEl.value = fund.notes || '';
+      if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square text-success me-2"></i>Edit Fund Entry (${fund.fund_id || ''})`;
+      if (submitBtn) submitBtn.innerHTML = `<i class="fa-solid fa-check me-1"></i> Update Fund`;
+    } else {
+      if (editIdEl) editIdEl.value = '';
+      if (amtEl) amtEl.value = '';
+      if (personEl) personEl.value = '';
+      if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+      if (notesEl) notesEl.value = '';
+      if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-arrow-down-left text-success me-2"></i>Add Fund (Money In)`;
+      if (submitBtn) submitBtn.innerHTML = `<i class="fa-solid fa-plus me-1"></i> Save Fund Entry`;
+    }
+
+    const modalEl = document.getElementById('addFundModal');
+    if (modalEl && window.bootstrap) {
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+    }
+  },
+
+  async submitFundForm() {
+    const editId = document.getElementById('fundEditId')?.value;
+    const amount = parseFloat(document.getElementById('fundAmountInput')?.value);
+    const person_name = document.getElementById('fundPersonInput')?.value.trim();
+    const fund_date = document.getElementById('fundDateInput')?.value;
+    const notes = document.getElementById('fundNotesInput')?.value.trim();
+
+    if (isNaN(amount) || amount <= 0) {
+      this.showToast('Please enter a valid positive fund amount.', 'warning');
+      return;
+    }
+    if (!person_name) {
+      this.showToast('Please enter the person name.', 'warning');
+      return;
+    }
+    if (!fund_date) {
+      this.showToast('Please select a valid date.', 'warning');
+      return;
+    }
+
+    const payload = { amount, person_name, fund_date, notes };
+    let res;
+    if (editId) {
+      res = await this.apiRequest(`/api/funds/${editId}`, 'PUT', payload);
+    } else {
+      res = await this.apiRequest('/api/funds', 'POST', payload);
+    }
+
+    if (res.success) {
+      this.showToast(res.message || 'Fund entry saved successfully in MongoDB Atlas.', 'success');
+      const modalEl = document.getElementById('addFundModal');
+      if (modalEl && window.bootstrap) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+      }
+      this.loadDashboardData();
+      if (this.currentView === 'funds') this.loadFunds();
+    } else {
+      this.showToast(res.message || 'Failed to save fund record.', 'error');
+    }
+  },
+
+  debounceFundsSearch() {
+    clearTimeout(this.fundsSearchDebounce);
+    this.fundsSearchDebounce = setTimeout(() => this.loadFunds(), 300);
+  },
+
+  resetFundsFilters() {
+    const sInput = document.getElementById('fundsSearchInput');
+    const dStart = document.getElementById('fundsStartDate');
+    const dEnd = document.getElementById('fundsEndDate');
+    if (sInput) sInput.value = '';
+    if (dStart) dStart.value = '';
+    if (dEnd) dEnd.value = '';
+    this.loadFunds();
+  },
+
+  async loadFunds() {
+    let url = '/api/funds?limit=100';
+    const search = document.getElementById('fundsSearchInput')?.value.trim();
+    const startDate = document.getElementById('fundsStartDate')?.value;
+    const endDate = document.getElementById('fundsEndDate')?.value;
+
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (startDate) url += `&startDate=${startDate}`;
+    if (endDate) url += `&endDate=${endDate}`;
+
+    const res = await this.apiRequest(url);
+    const tbody = document.getElementById('fundsTableBody');
+    const totalEl = document.getElementById('fundsViewTotalAmt');
+    const countEl = document.getElementById('fundsViewCount');
+
+    if (res.success && Array.isArray(res.funds)) {
+      this.allFundsCache = res.funds;
+      if (totalEl) totalEl.textContent = `+${this.formatINR(res.totalAmount || 0)}`;
+      if (countEl) countEl.textContent = (res.totalCount || 0).toLocaleString('en-IN');
+
+      if (!tbody) return;
+      if (res.funds.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">No fund records found. Click "+ Add Fund" to record incoming funds.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = res.funds.map(f => `
+        <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
+          <td class="py-3 px-4 fw-semibold text-muted small">${f.fund_id || f.id}</td>
+          <td class="py-3"><div class="fw-semibold text-white">${this.escapeHTML(f.person_name)}</div></td>
+          <td class="py-3 text-muted small">${this.formatDate(f.fund_date)}</td>
+          <td class="py-3"><span class="badge py-2 px-3 rounded-pill" style="background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 700;">+${this.formatINR(f.amount)}</span></td>
+          <td class="py-3 text-muted small" style="max-width: 200px;">${this.escapeHTML(f.notes || 'None')}</td>
+          <td class="py-3 text-muted small"><i class="fa-solid fa-user-circle me-1"></i>${this.escapeHTML(f.created_by || f.user_name || 'Admin')}</td>
+          <td class="py-3 px-4 text-end">
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary border-0" title="Edit Fund" onclick="App.editFund('${f._id || f.id}')">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+              <button class="btn btn-outline-danger border-0" title="Delete Fund" onclick="App.deleteFund('${f._id || f.id}', '${f.fund_id}', '${f.amount}', '${this.escapeHTML(f.person_name)}')">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    } else {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">Failed to load funds.</td></tr>`;
+    }
+  },
+
+  editFund(id) {
+    const fund = this.allFundsCache.find(f => (f._id === id || f.id === id || f.fund_id === id));
+    if (fund) {
+      this.openAddFundModal(fund);
+    }
+  },
+
+  async deleteFund(id, fundId, amount, person) {
+    const confirmMsg = `Permanently delete Fund "${fundId}"?\n\nAmount: +₹${parseFloat(amount).toLocaleString('en-IN')}\nPerson: ${person}\n\nThis deletion is permanent in MongoDB Atlas and cannot be recovered.\n\nClick OK to confirm permanent deletion.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    const res = await this.apiRequest(`/api/funds/${id}`, 'DELETE');
+    if (res.success) {
+      this.showToast(res.message || 'Fund permanently deleted.', 'success');
+      this.loadDashboardData();
+      this.loadFunds();
+    } else {
+      this.showToast(res.message || 'Failed to delete fund.', 'error');
+    }
+  },
+
+  // ==========================================================================
+  // SETTLE UP ENGINE
+  // ==========================================================================
+  allSettlementsCache: [],
+
+  openSettlementModal(settle = null) {
+    const editIdEl = document.getElementById('settleEditId');
+    const personEl = document.getElementById('settlePersonInput');
+    const amtEl = document.getElementById('settleAmountInput');
+    const typeEl = document.getElementById('settleTypeInput');
+    const dateEl = document.getElementById('settleDateInput');
+    const statusEl = document.getElementById('settleStatusInput');
+    const notesEl = document.getElementById('settleNotesInput');
+    const titleEl = document.getElementById('settleModalTitle');
+    const submitBtn = document.getElementById('settleSubmitBtn');
+
+    if (settle) {
+      if (editIdEl) editIdEl.value = settle._id || settle.id || settle.settlement_id;
+      if (personEl) personEl.value = settle.person_name || '';
+      if (amtEl) amtEl.value = settle.amount || '';
+      if (typeEl) typeEl.value = settle.settlement_type || 'Paid';
+      if (dateEl) dateEl.value = settle.settlement_date || new Date().toISOString().slice(0, 10);
+      if (statusEl) statusEl.value = settle.status || 'Settled';
+      if (notesEl) notesEl.value = settle.notes || '';
+      if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square text-primary me-2"></i>Edit Settlement (${settle.settlement_id || ''})`;
+      if (submitBtn) submitBtn.innerHTML = `<i class="fa-solid fa-check me-1"></i> Update Settlement`;
+    } else {
+      if (editIdEl) editIdEl.value = '';
+      if (personEl) personEl.value = '';
+      if (amtEl) amtEl.value = '';
+      if (typeEl) typeEl.value = 'Paid';
+      if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+      if (statusEl) statusEl.value = 'Settled';
+      if (notesEl) notesEl.value = '';
+      if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-handshake text-primary me-2"></i>New Settlement (Settle Up)`;
+      if (submitBtn) submitBtn.innerHTML = `<i class="fa-solid fa-handshake me-1"></i> Save Settlement`;
+    }
+
+    const modalEl = document.getElementById('settlementModal');
+    if (modalEl && window.bootstrap) {
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+    }
+  },
+
+  async submitSettlementForm() {
+    const editId = document.getElementById('settleEditId')?.value;
+    const person_name = document.getElementById('settlePersonInput')?.value.trim();
+    const amount = parseFloat(document.getElementById('settleAmountInput')?.value);
+    const settlement_type = document.getElementById('settleTypeInput')?.value;
+    const settlement_date = document.getElementById('settleDateInput')?.value;
+    const status = document.getElementById('settleStatusInput')?.value;
+    const notes = document.getElementById('settleNotesInput')?.value.trim();
+
+    if (!person_name) {
+      this.showToast('Please enter the person name.', 'warning');
+      return;
+    }
+    if (isNaN(amount) || amount <= 0) {
+      this.showToast('Please enter a valid positive amount.', 'warning');
+      return;
+    }
+    if (!settlement_date) {
+      this.showToast('Please select a valid date.', 'warning');
+      return;
+    }
+
+    const payload = { person_name, amount, settlement_type, settlement_date, status, notes };
+    let res;
+    if (editId) {
+      res = await this.apiRequest(`/api/settlements/${editId}`, 'PUT', payload);
+    } else {
+      res = await this.apiRequest('/api/settlements', 'POST', payload);
+    }
+
+    if (res.success) {
+      this.showToast(res.message || 'Settlement saved successfully.', 'success');
+      const modalEl = document.getElementById('settlementModal');
+      if (modalEl && window.bootstrap) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+      }
+      this.loadDashboardData();
+      if (this.currentView === 'settlements') this.loadSettlements();
+    } else {
+      this.showToast(res.message || 'Failed to save settlement.', 'error');
+    }
+  },
+
+  debounceSettlementsSearch() {
+    clearTimeout(this.settleSearchDebounce);
+    this.settleSearchDebounce = setTimeout(() => this.loadSettlements(), 300);
+  },
+
+  resetSettlementsFilters() {
+    const sInput = document.getElementById('settleSearchInput');
+    const sStat = document.getElementById('settleStatusFilter');
+    const sType = document.getElementById('settleTypeFilter');
+    if (sInput) sInput.value = '';
+    if (sStat) sStat.value = 'all';
+    if (sType) sType.value = 'all';
+    this.loadSettlements();
+  },
+
+  async loadSettlements() {
+    let url = '/api/settlements?';
+    const search = document.getElementById('settleSearchInput')?.value.trim();
+    const status = document.getElementById('settleStatusFilter')?.value;
+    const type = document.getElementById('settleTypeFilter')?.value;
+
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (status && status !== 'all') url += `&status=${encodeURIComponent(status)}`;
+    if (type && type !== 'all') url += `&settlement_type=${encodeURIComponent(type)}`;
+
+    const res = await this.apiRequest(url);
+    const tbody = document.getElementById('settlementsTableBody');
+    const ledgerEl = document.getElementById('settlementsPersonLedger');
+
+    if (res.success && Array.isArray(res.settlements)) {
+      this.allSettlementsCache = res.settlements;
+
+      // Render Person Breakdown Ledger
+      if (ledgerEl && Array.isArray(res.personBreakdown) && res.personBreakdown.length > 0) {
+        ledgerEl.innerHTML = `
+          <h5 class="fw-bold mb-3 d-flex align-items-center gap-2" style="color: #f8fafc;">
+            <i class="fa-solid fa-users text-primary"></i>
+            <span>Person-Wise Settlement Ledger</span>
+          </h5>
+          <div class="row g-3">
+            ${res.personBreakdown.map(p => `
+              <div class="col-md-6 col-xl-4">
+                <div class="glass-card p-3 h-100">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 34px; height: 34px; background: rgba(99, 102, 241, 0.2); color: #818cf8; font-weight: bold;">
+                        ${p.person_name.charAt(0).toUpperCase()}
+                      </div>
+                      <h6 class="mb-0 fw-bold text-white">${this.escapeHTML(p.person_name)}</h6>
+                    </div>
+                    ${p.pendingCount > 0 ? `<span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill">${p.pendingCount} Pending</span>` : `<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">Settled</span>`}
+                  </div>
+                  <div class="p-2 rounded mt-2" style="background: rgba(15, 23, 42, 0.4); font-size: 0.825rem;">
+                    <div class="d-flex justify-content-between py-1"><span class="text-muted">Total Received:</span><span class="fw-semibold text-success">+${this.formatINR(p.totalReceived)}</span></div>
+                    <div class="d-flex justify-content-between py-1"><span class="text-muted">Total Paid:</span><span class="fw-semibold text-danger">-${this.formatINR(p.totalPaid)}</span></div>
+                    <div class="d-flex justify-content-between py-1 border-top" style="border-color: rgba(255,255,255,0.08) !important;"><span class="fw-bold text-white">Net Position:</span><span class="fw-bold ${p.net >= 0 ? 'text-primary' : 'text-danger'}">${p.net >= 0 ? `+${this.formatINR(p.net)}` : this.formatINR(p.net)}</span></div>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else if (ledgerEl) {
+        ledgerEl.innerHTML = '';
+      }
+
+      if (!tbody) return;
+      if (res.settlements.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">No settlement records found. Click "+ New Settlement" to record one.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = res.settlements.map(s => `
+        <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
+          <td class="py-3 px-4 fw-semibold text-muted small">${s.settlement_id || s.id}</td>
+          <td class="py-3"><div class="fw-semibold text-white">${this.escapeHTML(s.person_name)}</div></td>
+          <td class="py-3"><span class="badge py-1 px-2 rounded-pill ${s.settlement_type === 'Paid' ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success'}">${s.settlement_type === 'Paid' ? 'Paid (Out)' : 'Received (In)'}</span></td>
+          <td class="py-3 fw-bold ${s.settlement_type === 'Paid' ? 'text-danger' : 'text-success'}">${s.settlement_type === 'Paid' ? `-${this.formatINR(s.amount)}` : `+${this.formatINR(s.amount)}`}</td>
+          <td class="py-3 text-muted small">${this.formatDate(s.settlement_date)}</td>
+          <td class="py-3">
+            <button class="badge border-0 py-1 px-2 rounded-pill ${s.status === 'Settled' ? 'bg-success text-white' : 'bg-warning text-dark'}" title="Click to toggle status" onclick="App.toggleSettlementStatus('${s._id || s.id}', '${s.status}')">
+              <i class="fa-solid ${s.status === 'Settled' ? 'fa-check-circle' : 'fa-clock'} me-1"></i>${s.status}
+            </button>
+          </td>
+          <td class="py-3 text-muted small" style="max-width: 180px;">${this.escapeHTML(s.notes || 'None')}</td>
+          <td class="py-3 px-4 text-end">
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary border-0" title="Edit Settlement" onclick="App.editSettlement('${s._id || s.id}')">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+              <button class="btn btn-outline-danger border-0" title="Delete Settlement" onclick="App.deleteSettlement('${s._id || s.id}', '${s.settlement_id}', '${s.amount}', '${this.escapeHTML(s.person_name)}')">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    } else {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">Failed to load settlements.</td></tr>`;
+    }
+  },
+
+  async toggleSettlementStatus(id, currentStatus) {
+    const nextStatus = currentStatus === 'Pending' ? 'Settled' : 'Pending';
+    const res = await this.apiRequest(`/api/settlements/${id}/status`, 'PATCH', { status: nextStatus });
+    if (res.success) {
+      this.showToast(`Settlement marked as ${nextStatus}.`, 'success');
+      this.loadDashboardData();
+      this.loadSettlements();
+    } else {
+      this.showToast(res.message || 'Failed to update status.', 'error');
+    }
+  },
+
+  editSettlement(id) {
+    const settle = this.allSettlementsCache.find(s => (s._id === id || s.id === id || s.settlement_id === id));
+    if (settle) {
+      this.openSettlementModal(settle);
+    }
+  },
+
+  async deleteSettlement(id, settleId, amount, person) {
+    const confirmMsg = `Permanently delete Settlement "${settleId}"?\n\nPerson: ${person}\nAmount: ₹${parseFloat(amount).toLocaleString('en-IN')}\n\nThis deletion is permanent in MongoDB Atlas.\n\nClick OK to confirm.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    const res = await this.apiRequest(`/api/settlements/${id}`, 'DELETE');
+    if (res.success) {
+      this.showToast(res.message || 'Settlement deleted.', 'success');
+      this.loadDashboardData();
+      this.loadSettlements();
+    } else {
+      this.showToast(res.message || 'Failed to delete settlement.', 'error');
     }
   }
 };

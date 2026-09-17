@@ -960,3 +960,30 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: var(--shadow-sm);
 }
 
+.btn-success-custom {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff !important;
+  border: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-success-custom:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.btn-indigo-custom {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff !important;
+  border: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-indigo-custom:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+

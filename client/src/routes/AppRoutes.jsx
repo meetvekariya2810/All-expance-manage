@@ -14,6 +14,8 @@ import UserManagementPage from '../pages/UserManagementPage';
 import ProfilePage from '../pages/ProfilePage';
 import ActivityPage from '../pages/ActivityPage';
 import ExpenseMonitoringPage from '../pages/ExpenseMonitoringPage';
+import FundListPage from '../pages/FundListPage';
+import SettlementPage from '../pages/SettlementPage';
 
 // Component to protect all Private/Dashboard routes
 const ProtectedRoute = ({ children }) => {
@@ -69,6 +71,8 @@ export default function AppRoutes() {
         <Route path="expenses" element={<ExpenseListPage />} />
         <Route path="expenses/new" element={<ExpenseEntryPage />} />
         <Route path="expenses/edit/:id" element={<ExpenseEntryPage />} />
+        <Route path="funds" element={<FundListPage />} />
+        <Route path="settlements" element={<SettlementPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="budget" element={<BudgetPage />} />
         <Route path="activity" element={<ActivityPage />} />

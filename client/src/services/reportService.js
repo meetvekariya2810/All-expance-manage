@@ -14,7 +14,8 @@ export const reportService = {
 
     const extensionMap = { pdf: 'pdf', excel: 'xlsx', csv: 'csv' };
     const ext = extensionMap[type] || type;
-    const defaultFilename = `Expense_Statement_${Date.now()}.${ext}`;
+    const prefix = params?.entity === 'funds' ? 'Funds_Statement_' : (params?.entity === 'settlements' ? 'Settlements_Statement_' : 'Expense_Statement_');
+    const defaultFilename = `${prefix}${Date.now()}.${ext}`;
 
     const disposition = res.headers['content-disposition'];
     let filename = defaultFilename;

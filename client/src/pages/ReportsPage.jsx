@@ -8,6 +8,7 @@ export default function ReportsPage() {
   const { showToast } = useToast();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [exportEntity, setExportEntity] = useState('expenses'); // expenses, funds, settlements
 
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -28,55 +29,118 @@ export default function ReportsPage() {
   }, [showToast]);
 
   const handleExport = async (type) => {
-    showToast(`Preparing ${type.toUpperCase()} download...`, 'info');
+    const entityLabel = exportEntity === 'funds' ? 'Funds' : (exportEntity === 'settlements' ? 'Settlements' : 'Expenses');
+    showToast(`Preparing ${entityLabel} ${type.toUpperCase()} download...`, 'info');
     try {
-      await reportService.downloadExport(type);
-      showToast(`${type.toUpperCase()} statement downloaded successfully!`, 'success');
+      await reportService.downloadExport(type, { entity: exportEntity });
+      showToast(`${entityLabel} ${type.toUpperCase()} statement downloaded successfully!`, 'success');
     } catch (err) {
       showToast('Export failed. ' + (err.message || ''), 'error');
     }
   };
 
   const categoryBreakdown = metrics?.categoryBreakdown || {};
+  const fundsByPerson = metrics?.fundsByPerson || {};
   const monthlyTrend = metrics?.monthlyTrend || {};
   const totalSpend = metrics?.totalSpending || 0;
+  const totalFunds = metrics?.totalFunds || 0;
 
   return (
     <div className="view-container active">
       {/* Title box */}
       <div className="page-title-box">
         <div>
-          <h3>Reports & Analytics Center</h3>
-          <p>Export formal statements to PDF, Excel (.xlsx), or CSV</p>
+          <h3>Reports & Financial Statements</h3>
+          <p>Export authoritative financial statements for Expenses, Funds, and Settlements</p>
         </div>
-        <div className="d-flex gap-2 flex-wrap">
-          <button className="btn btn-secondary-custom" onClick={() => handleExport('pdf')}>
-            <i className="fa-solid fa-file-pdf text-danger me-1"></i> PDF
-          </button>
-          <button className="btn btn-secondary-custom" onClick={() => handleExport('excel')}>
-            <i className="fa-solid fa-file-excel text-success me-1"></i> Excel
-          </button>
-          <button className="btn btn-secondary-custom" onClick={() => handleExport('csv')}>
-            <i className="fa-solid fa-file-csv text-primary me-1"></i> CSV
-          </button>
-          <button className="btn btn-secondary-custom" onClick={() => window.print()}>
-            <i className="fa-solid fa-print me-1"></i> Print
-          </button>
+        <div className="d-flex gap-2 flex-wrap align-items-center">
+          {/* Entity Selector */}
+          <div className="btn-group btn-group-sm">
+            <button
+              type="button"
+              className={`btn ${exportEntity === 'expenses' ? 'btn-primary-custom' : 'btn-secondary-custom'}`}
+              onClick={() => setExportEntity('expenses')}
+            >
+              Expenses
+            </button>
+            <button
+              type="button"
+              className={`btn ${exportEntity === 'funds' ? 'btn-success-custom text-white' : 'btn-secondary-custom'}`}
+              onClick={() => setExportEntity('funds')}
+              style={exportEntity === 'funds' ? { background: '#10b981', borderColor: '#10b981' } : {}}
+            >
+              Funds In
+            </button>
+            <button
+              type="button"
+              className={`btn ${exportEntity === 'settlements' ? 'btn-indigo-custom text-white' : 'btn-secondary-custom'}`}
+              onClick={() => setExportEntity('settlements')}
+              style={exportEntity === 'settlements' ? { background: '#6366f1', borderColor: '#6366f1' } : {}}
+            >
+              Settlements
+            </button>
+          </div>
+
+          <div className="d-flex gap-2">
+            <button className="btn btn-secondary-custom" onClick={() => handleExport('pdf')}>
+              <i className="fa-solid fa-file-pdf text-danger me-1"></i> PDF
+            </button>
+            <button className="btn btn-secondary-custom" onClick={() => handleExport('excel')}>
+              <i className="fa-solid fa-file-excel text-success me-1"></i> Excel
+            </button>
+            <button className="btn btn-secondary-custom" onClick={() => handleExport('csv')}>
+              <i className="fa-solid fa-file-csv text-primary me-1"></i> CSV
+            </button>
+            <button className="btn btn-secondary-custom" onClick={() => window.print()}>
+              <i className="fa-solid fa-print me-1"></i> Print
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Quick Metrics Grid */}
+      {/* Core Balance Summary Card */}
+      <div className="row g-3 mb-4">
+        <div className="col-md-4">
+          <div className="stat-card glass-card h-100 p-3" style={{ borderLeft: '4px solid #10b981' }}>
+            <div className="stat-card-title text-uppercase" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Total Funds (Money In)</div>
+            <div className="stat-card-value my-1" style={{ fontSize: '1.75rem', fontWeight: 800, color: '#10b981' }}>
+              +{formatINR(totalFunds)}
+            </div>
+            <div className="stat-card-subtitle" style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              {metrics?.totalFundTransactions || 0} deposit entries
+            </div>
+          </div>
+        </div>
+
+        <div className="col-md-4">
+          <div className="stat-card glass-card h-100 p-3" style={{ borderLeft: '4px solid #ef4444' }}>
+            <div className="stat-card-title text-uppercase" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Total Expenses (Money Out)</div>
+            <div className="stat-card-value my-1" style={{ fontSize: '1.75rem', fontWeight: 800, color: '#ef4444' }}>
+              -{formatINR(totalSpend)}
+            </div>
+            <div className="stat-card-subtitle" style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              {metrics?.totalTransactions || 0} total transactions
+            </div>
+          </div>
+        </div>
+
+        <div className="col-md-4">
+          <div className="stat-card glass-card h-100 p-3" style={{ borderLeft: '4px solid #3b82f6' }}>
+            <div className="stat-card-title text-uppercase" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Available Balance</div>
+            <div className="stat-card-value my-1" style={{ fontSize: '1.75rem', fontWeight: 800, color: (metrics?.availableBalance || 0) >= 0 ? '#3b82f6' : '#ef4444' }}>
+              {formatINR(metrics?.availableBalance || 0)}
+            </div>
+            <div className="stat-card-subtitle" style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              Funds - Expenses
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary Metrics Grid */}
       <div className="stats-grid mb-4">
         <StatCard
-          title="Total Expenditure"
-          value={formatINR(metrics?.totalSpending)}
-          subtitle={`${metrics?.totalTransactions || 0} transactions`}
-          icon="fa-sack-dollar"
-          color="primary"
-        />
-
-        <StatCard
-          title="Average / Txn"
+          title="Average Spend / Txn"
           value={formatINR(metrics?.averageSpending)}
           subtitle="Mean spend per record"
           icon="fa-calculator"
@@ -84,7 +148,7 @@ export default function ReportsPage() {
         />
 
         <StatCard
-          title="Highest Txn"
+          title="Highest Single Spend"
           value={formatINR(metrics?.highestExpense)}
           subtitle="Peak single expenditure"
           icon="fa-arrow-trend-up"
@@ -92,93 +156,92 @@ export default function ReportsPage() {
         />
 
         <StatCard
-          title="Lowest Txn"
-          value={formatINR(metrics?.lowestExpense)}
-          subtitle="Minimum expenditure"
-          icon="fa-arrow-trend-down"
+          title="Settlements Paid"
+          value={formatINR(metrics?.settlements?.totalPaid || 0)}
+          subtitle="Total paid out"
+          icon="fa-arrow-up-right"
+          color="warning"
+        />
+
+        <StatCard
+          title="Settlements Received"
+          value={formatINR(metrics?.settlements?.totalReceived || 0)}
+          subtitle="Total received in"
+          icon="fa-arrow-down-left"
           color="success"
         />
       </div>
 
-      {/* Report Breakdown Tables */}
-      <div className="row g-4">
-        {/* Spending by Category Table */}
-        <div className="col-lg-6">
+      {/* Breakdown Grids */}
+      <div className="row g-4 mb-4">
+        {/* Category Breakdown */}
+        <div className="col-md-6">
           <div className="glass-card p-4 h-100">
-            <h5 className="fw-bold mb-3">
-              <i className="fa-solid fa-tags me-2 text-primary"></i> Spending by Category
+            <h5 className="fw-bold mb-3 d-flex align-items-center gap-2">
+              <i className="fa-solid fa-layer-group text-primary"></i> Expense Category Breakdown
             </h5>
-            <div className="table-glass-container">
-              <table className="table-custom">
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th className="text-end">Total Amount</th>
-                    <th className="text-end">Percentage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.keys(categoryBreakdown).length > 0 ? (
-                    Object.entries(categoryBreakdown)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([cat, amt]) => {
-                        const pct = totalSpend > 0 ? Math.round((amt / totalSpend) * 100) : 0;
-                        return (
-                          <tr key={cat}>
-                            <td className="fw-semibold">{cat}</td>
-                            <td className="text-end fw-bold text-primary">{formatINR(amt)}</td>
-                            <td className="text-end">
-                              <span className="badge bg-light text-dark border">{pct}%</span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                  ) : (
-                    <tr>
-                      <td colSpan="3" className="text-center py-4 text-muted">
-                        No category data recorded.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="category-breakdown-list">
+              {Object.keys(categoryBreakdown).length > 0 ? (
+                Object.entries(categoryBreakdown).map(([category, amount]) => {
+                  const percentage = totalSpend > 0 ? Math.round((amount / totalSpend) * 100) : 0;
+                  return (
+                    <div key={category} className="mb-3">
+                      <div className="d-flex justify-content-between mb-1 small">
+                        <span className="fw-semibold">{category}</span>
+                        <span>{formatINR(amount)} ({percentage}%)</span>
+                      </div>
+                      <div className="progress" style={{ height: '8px', background: 'rgba(255, 255, 255, 0.08)' }}>
+                        <div
+                          className="progress-bar bg-primary"
+                          role="progressbar"
+                          style={{ width: `${percentage}%` }}
+                          aria-valuenow={percentage}
+                          aria-valuemin="0"
+                          aria-valuemax="100"
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-muted text-center py-4">No categories recorded.</div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Monthly Breakdown Table */}
-        <div className="col-lg-6">
+        {/* Funds by Person Breakdown */}
+        <div className="col-md-6">
           <div className="glass-card p-4 h-100">
-            <h5 className="fw-bold mb-3">
-              <i className="fa-solid fa-calendar-days me-2 text-purple"></i> Monthly Breakdown
+            <h5 className="fw-bold mb-3 d-flex align-items-center gap-2">
+              <i className="fa-solid fa-hand-holding-dollar text-success"></i> Funds by Contributor
             </h5>
-            <div className="table-glass-container">
-              <table className="table-custom">
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th className="text-end">Total Amount (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.keys(monthlyTrend).length > 0 ? (
-                    Object.entries(monthlyTrend)
-                      .sort((a, b) => (b[0] > a[0] ? 1 : -1))
-                      .map(([m, amt]) => (
-                        <tr key={m}>
-                          <td className="fw-semibold">{m}</td>
-                          <td className="text-end fw-bold text-purple">{formatINR(amt)}</td>
-                        </tr>
-                      ))
-                  ) : (
-                    <tr>
-                      <td colSpan="2" className="text-center py-4 text-muted">
-                        No monthly trend data recorded.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="category-breakdown-list">
+              {Object.keys(fundsByPerson).length > 0 ? (
+                Object.entries(fundsByPerson).map(([person, amount]) => {
+                  const percentage = totalFunds > 0 ? Math.round((amount / totalFunds) * 100) : 0;
+                  return (
+                    <div key={person} className="mb-3">
+                      <div className="d-flex justify-content-between mb-1 small">
+                        <span className="fw-semibold text-white">{person}</span>
+                        <span className="text-success font-monospace">+{formatINR(amount)} ({percentage}%)</span>
+                      </div>
+                      <div className="progress" style={{ height: '8px', background: 'rgba(255, 255, 255, 0.08)' }}>
+                        <div
+                          className="progress-bar bg-success"
+                          role="progressbar"
+                          style={{ width: `${percentage}%` }}
+                          aria-valuenow={percentage}
+                          aria-valuemin="0"
+                          aria-valuemax="100"
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-muted text-center py-4">No fund deposits recorded yet.</div>
+              )}
             </div>
           </div>
         </div>

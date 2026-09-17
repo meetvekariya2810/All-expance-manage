@@ -267,3 +267,46 @@ export function UserComparisonChart({ data = {} }) {
 
   return <Bar data={chartData} options={options} />;
 }
+
+export function FundsVsExpensesChart({ funds = 0, expenses = 0 }) {
+  const chartData = {
+    labels: ['Total Funds (Money In)', 'Total Expenses (Money Out)'],
+    datasets: [
+      {
+        data: [funds, expenses],
+        backgroundColor: ['#10b981', '#ef4444'],
+        borderRadius: 8,
+        barThickness: 45
+      }
+    ]
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.label}: ${formatINR(context.raw || 0)}`
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: (val) => '₹' + val.toLocaleString('en-IN'),
+          font: { family: 'Plus Jakarta Sans', size: 10 }
+        },
+        grid: { color: 'rgba(255,255,255,0.05)' }
+      },
+      x: {
+        grid: { display: false },
+        ticks: { font: { family: 'Plus Jakarta Sans', size: 11, weight: 'bold' } }
+      }
+    }
+  };
+
+  return <Bar data={chartData} options={options} />;
+}

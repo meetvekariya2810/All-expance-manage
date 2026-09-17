@@ -1,21 +1,29 @@
 const Expense = require('../models/Expense');
 const Budget = require('../models/Budget');
 const User = require('../models/User');
-const { getMongoStatus, memoryStore } = require('../config/db');
+const Fund = require('../models/Fund');
+const Settlement = require('../models/Settlement');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 
 // Shared filter helper for metrics and exports
 const getFilteredExpenses = async (req) => {
-  const { role, id: userId } = req.user;
+  const { role, id: userId, username } = req.user;
   const { search, category, payment_method, person, startDate, endDate, month } = req.query;
 
   let filter = {};
 
   if (role !== 'admin') {
-    filter.user_id = userId;
+    filter.$or = [{ user_id: userId }, { user_id: username }];
   } else if (person && person !== 'all') {
-    filter.user_id = person;
+    const targetUser = await User.findOne({
+      $or: [{ _id: person }, { id: person }, { username: person }]
+    });
+    if (targetUser) {
+      filter.$or = [{ user_id: targetUser._id }, { user_id: targetUser.username }];
+    } else {
+      filter.user_id = person;
+    }
   }
 
   if (category && category !== 'all') filter.category = category;
@@ -31,389 +39,807 @@ const getFilteredExpenses = async (req) => {
     filter.expense_date = { $regex: `^${month}` };
   }
 
-  let expenses = [];
+  if (search && search.trim()) {
+    const q = search.trim();
+    const searchRegex = { $regex: q, $options: 'i' };
+    const searchConditions = [
+      { title: searchRegex },
+      { description: searchRegex },
+      { vendor: searchRegex },
+      { location: searchRegex },
+      { expense_id: searchRegex },
+      { category: searchRegex },
+      { notes: searchRegex },
+      { user_name: searchRegex }
+    ];
 
-  if (getMongoStatus()) {
-    let query = Expense.find(filter);
-
-    if (search && search.trim()) {
-      const q = search.trim();
-      query = query.find({
-        $or: [
-          { title: { $regex: q, $options: 'i' } },
-          { description: { $regex: q, $options: 'i' } },
-          { vendor: { $regex: q, $options: 'i' } },
-          { location: { $regex: q, $options: 'i' } },
-          { expense_id: { $regex: q, $options: 'i' } },
-          { category: { $regex: q, $options: 'i' } },
-          { notes: { $regex: q, $options: 'i' } },
-          { user_name: { $regex: q, $options: 'i' } }
+    if (filter.$or) {
+      filter = {
+        $and: [
+          { $or: filter.$or },
+          { $or: searchConditions },
+          ...Object.keys(filter).filter(k => k !== '$or').map(k => ({ [k]: filter[k] }))
         ]
-      });
+      };
+    } else {
+      filter.$or = searchConditions;
     }
-
-    expenses = await query.sort({ expense_date: -1, created_at: -1 }).exec();
-  } else {
-    let list = [...(memoryStore.expenses || [])];
-
-    if (role !== 'admin') {
-      list = list.filter(e => e.user_id === userId);
-    } else if (person && person !== 'all') {
-      list = list.filter(e => e.user_id === person);
-    }
-
-    if (category && category !== 'all') {
-      list = list.filter(e => e.category === category);
-    }
-
-    if (payment_method && payment_method !== 'all') {
-      list = list.filter(e => e.payment_method === payment_method);
-    }
-
-    if (startDate) list = list.filter(e => e.expense_date >= startDate);
-    if (endDate) list = list.filter(e => e.expense_date <= endDate);
-    if (month) list = list.filter(e => e.expense_date && e.expense_date.startsWith(month));
-
-    if (search && search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter(e =>
-        (e.title && e.title.toLowerCase().includes(q)) ||
-        (e.description && e.description.toLowerCase().includes(q)) ||
-        (e.vendor && e.vendor.toLowerCase().includes(q)) ||
-        (e.location && e.location.toLowerCase().includes(q)) ||
-        (e.expense_id && e.expense_id.toLowerCase().includes(q)) ||
-        (e.category && e.category.toLowerCase().includes(q)) ||
-        (e.notes && e.notes.toLowerCase().includes(q)) ||
-        (e.user_name && e.user_name.toLowerCase().includes(q))
-      );
-    }
-
-    list.sort((a, b) => (b.expense_date > a.expense_date ? 1 : (b.expense_date < a.expense_date ? -1 : 0)));
-    expenses = list;
   }
 
-  return expenses;
+  return await Expense.find(filter).sort({ expense_date: -1, created_at: -1 }).exec();
+};
+
+// Filter helper for Funds
+const getFilteredFunds = async (req) => {
+  const { role, id: userId, username } = req.user;
+  const { search, person, startDate, endDate, month } = req.query;
+
+  let filter = {};
+
+  if (role !== 'admin') {
+    filter.$or = [{ user_id: userId }, { user_id: username }];
+  } else if (person && person !== 'all') {
+    const targetUser = await User.findOne({
+      $or: [{ _id: person }, { id: person }, { username: person }]
+    });
+    if (targetUser) {
+      filter.$or = [
+        { user_id: targetUser._id },
+        { user_id: targetUser.username },
+        { person_name: { $regex: targetUser.name, $options: 'i' } }
+      ];
+    } else {
+      filter.$or = [
+        { user_id: person },
+        { person_name: { $regex: person, $options: 'i' } }
+      ];
+    }
+  }
+
+  if (startDate && endDate) {
+    filter.fund_date = { $gte: startDate, $lte: endDate };
+  } else if (startDate) {
+    filter.fund_date = { $gte: startDate };
+  } else if (endDate) {
+    filter.fund_date = { $lte: endDate };
+  } else if (month) {
+    filter.fund_date = { $regex: `^${month}` };
+  }
+
+  if (search && search.trim()) {
+    const q = search.trim();
+    const searchRegex = { $regex: q, $options: 'i' };
+    const searchConditions = [
+      { fund_id: searchRegex },
+      { person_name: searchRegex },
+      { notes: searchRegex },
+      { user_name: searchRegex },
+      { created_by: searchRegex }
+    ];
+
+    if (filter.$or) {
+      filter = {
+        $and: [
+          { $or: filter.$or },
+          { $or: searchConditions }
+        ]
+      };
+    } else {
+      filter.$or = searchConditions;
+    }
+  }
+
+  return await Fund.find(filter).sort({ fund_date: -1, created_at: -1 }).exec();
+};
+
+// Filter helper for Settlements
+const getFilteredSettlements = async (req) => {
+  const { role, id: userId, username } = req.user;
+  const { search, person, status, settlement_type, startDate, endDate } = req.query;
+
+  let filter = {};
+
+  if (role !== 'admin') {
+    filter.$or = [{ user_id: userId }, { user_id: username }];
+  } else if (person && person !== 'all') {
+    const targetUser = await User.findOne({
+      $or: [{ _id: person }, { id: person }, { username: person }]
+    });
+    if (targetUser) {
+      filter.$or = [
+        { user_id: targetUser._id },
+        { user_id: targetUser.username },
+        { person_name: { $regex: targetUser.name, $options: 'i' } }
+      ];
+    } else {
+      filter.$or = [
+        { user_id: person },
+        { person_name: { $regex: person, $options: 'i' } }
+      ];
+    }
+  }
+
+  if (status && status !== 'all') filter.status = status;
+  if (settlement_type && settlement_type !== 'all') filter.settlement_type = settlement_type;
+
+  if (startDate && endDate) {
+    filter.settlement_date = { $gte: startDate, $lte: endDate };
+  } else if (startDate) {
+    filter.settlement_date = { $gte: startDate };
+  } else if (endDate) {
+    filter.settlement_date = { $lte: endDate };
+  }
+
+  if (search && search.trim()) {
+    const q = search.trim();
+    const searchRegex = { $regex: q, $options: 'i' };
+    const searchConditions = [
+      { settlement_id: searchRegex },
+      { person_name: searchRegex },
+      { notes: searchRegex },
+      { user_name: searchRegex },
+      { created_by: searchRegex }
+    ];
+
+    if (filter.$or) {
+      filter = {
+        $and: [
+          { $or: filter.$or },
+          { $or: searchConditions }
+        ]
+      };
+    } else {
+      filter.$or = searchConditions;
+    }
+  }
+
+  return await Settlement.find(filter).sort({ settlement_date: -1, created_at: -1 }).exec();
 };
 
 const getSummaryMetrics = async (req, res) => {
   try {
-    const { role, id: userId } = req.user;
+    const { role, id: userId, username } = req.user;
     const { person, month } = req.query;
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentMonthStr = month || todayStr.slice(0, 7);
 
-    // Get filtered expenses based on person if selected
-    let filter = {};
-    if (role !== 'admin') {
-      filter.user_id = userId;
-    } else if (person && person !== 'all') {
-      filter.user_id = person;
-    }
+    // Build base filter for user scope
+    let baseExpenseFilter = {};
+    let baseFundFilter = {};
+    let baseSettlementFilter = {};
+    let targetScope = 'global';
 
-    let allExpenses = [];
-    if (getMongoStatus()) {
-      allExpenses = await Expense.find(filter).sort({ expense_date: -1 });
-    } else {
-      allExpenses = memoryStore.expenses || [];
-      if (role !== 'admin') {
-        allExpenses = allExpenses.filter(e => e.user_id === userId);
-      } else if (person && person !== 'all') {
-        allExpenses = allExpenses.filter(e => e.user_id === person);
+    if (role !== 'admin') {
+      baseExpenseFilter.$or = [{ user_id: userId }, { user_id: username }];
+      baseFundFilter.$or = [{ user_id: userId }, { user_id: username }];
+      baseSettlementFilter.$or = [{ user_id: userId }, { user_id: username }];
+      targetScope = userId;
+    } else if (person && person !== 'all') {
+      const targetUser = await User.findOne({
+        $or: [{ _id: person }, { id: person }, { username: person }]
+      });
+      if (targetUser) {
+        baseExpenseFilter.$or = [{ user_id: targetUser._id }, { user_id: targetUser.username }];
+        baseFundFilter.$or = [
+          { user_id: targetUser._id },
+          { user_id: targetUser.username },
+          { person_name: { $regex: targetUser.name, $options: 'i' } }
+        ];
+        baseSettlementFilter.$or = [
+          { user_id: targetUser._id },
+          { user_id: targetUser.username },
+          { person_name: { $regex: targetUser.name, $options: 'i' } }
+        ];
+        targetScope = targetUser._id;
+      } else {
+        baseExpenseFilter.user_id = person;
+        baseFundFilter.$or = [
+          { user_id: person },
+          { person_name: { $regex: person, $options: 'i' } }
+        ];
+        baseSettlementFilter.$or = [
+          { user_id: person },
+          { person_name: { $regex: person, $options: 'i' } }
+        ];
+        targetScope = person;
       }
     }
 
-    const totalCount = allExpenses.length;
-    const totalExpense = allExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
-    const averageExpense = totalCount > 0 ? Math.round(totalExpense / totalCount) : 0;
+    // 1. Fetch Expenses
+    const allExpenses = await Expense.find(baseExpenseFilter).sort({ expense_date: -1, created_at: -1 });
+    const totalSpending = allExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+    const totalTransactions = allExpenses.length;
 
-    let highestExpense = 0;
-    let lowestExpense = totalCount > 0 ? (parseFloat(allExpenses[0].amount) || 0) : 0;
-    allExpenses.forEach(e => {
-      const amt = parseFloat(e.amount) || 0;
-      if (amt > highestExpense) highestExpense = amt;
-      if (amt < lowestExpense) lowestExpense = amt;
+    const monthlyExpenses = allExpenses.filter(e => e.expense_date && e.expense_date.startsWith(currentMonthStr));
+    const monthlySpending = monthlyExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+
+    const todayExpenses = allExpenses.filter(e => e.expense_date === todayStr);
+    const todaySpending = todayExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+
+    // 2. Fetch Funds (MongoDB Atlas source of truth)
+    const allFunds = await Fund.find(baseFundFilter).sort({ fund_date: -1, created_at: -1 });
+    const totalFunds = allFunds.reduce((sum, f) => sum + (parseFloat(f.amount) || 0), 0);
+    const totalFundTransactions = allFunds.length;
+
+    const monthlyFundsList = allFunds.filter(f => f.fund_date && f.fund_date.startsWith(currentMonthStr));
+    const monthlyFunds = monthlyFundsList.reduce((sum, f) => sum + (parseFloat(f.amount) || 0), 0);
+
+    const todayFundsList = allFunds.filter(f => f.fund_date === todayStr);
+    const todayFunds = todayFundsList.reduce((sum, f) => sum + (parseFloat(f.amount) || 0), 0);
+
+    // Core Formula: Available Balance = Total Funds - Total Expenses
+    const availableBalance = totalFunds - totalSpending;
+    const monthlyAvailableBalance = monthlyFunds - monthlySpending;
+
+    // 3. Fetch Settlements (Settle Up)
+    const allSettlements = await Settlement.find(baseSettlementFilter).sort({ settlement_date: -1, created_at: -1 });
+    let totalSettlementsPaid = 0;
+    let totalSettlementsReceived = 0;
+    let pendingSettlementsCount = 0;
+    let pendingSettlementsAmount = 0;
+    let settledSettlementsCount = 0;
+    let settledSettlementsAmount = 0;
+
+    allSettlements.forEach((s) => {
+      const amt = parseFloat(s.amount) || 0;
+      if (s.settlement_type === 'Paid') {
+        totalSettlementsPaid += amt;
+      } else if (s.settlement_type === 'Received') {
+        totalSettlementsReceived += amt;
+      }
+      if (s.status === 'Pending') {
+        pendingSettlementsCount++;
+        pendingSettlementsAmount += amt;
+      } else {
+        settledSettlementsCount++;
+        settledSettlementsAmount += amt;
+      }
     });
 
-    const todayExpense = allExpenses
-      .filter(e => e.expense_date === todayStr)
-      .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
-
-    const monthlyExpense = allExpenses
-      .filter(e => e.expense_date && e.expense_date.startsWith(currentMonthStr))
-      .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+    // Average, Max, Min Expenses
+    const averageSpending = totalTransactions > 0 ? (totalSpending / totalTransactions) : 0;
+    const highestExpense = totalTransactions > 0 ? Math.max(...allExpenses.map(e => parseFloat(e.amount) || 0)) : 0;
+    const lowestExpense = totalTransactions > 0 ? Math.min(...allExpenses.map(e => parseFloat(e.amount) || 0)) : 0;
 
     // Category breakdown
-    const categoryTotals = {};
+    const categoryBreakdown = {};
     allExpenses.forEach(e => {
-      const cat = e.category || 'Other';
-      categoryTotals[cat] = (categoryTotals[cat] || 0) + (parseFloat(e.amount) || 0);
+      const cat = e.category || 'Miscellaneous';
+      categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + (parseFloat(e.amount) || 0);
     });
 
-    // Payment method breakdown
-    const paymentTotals = {
-      'UPI': 0,
-      'Cash': 0,
-      'Credit Card': 0,
-      'Debit Card': 0,
-      'Net Banking': 0,
-      'Other': 0
-    };
-    allExpenses.forEach(e => {
-      const pm = e.payment_method || 'UPI';
-      paymentTotals[pm] = (paymentTotals[pm] || 0) + (parseFloat(e.amount) || 0);
+    // Funds by Person breakdown
+    const fundsByPerson = {};
+    allFunds.forEach(f => {
+      const p = f.person_name || 'Other';
+      fundsByPerson[p] = (fundsByPerson[p] || 0) + (parseFloat(f.amount) || 0);
     });
 
-    // User-wise breakdown for Admin
-    const userTotals = {};
-    const userSummaryMap = {};
-
-    if (role === 'admin') {
-      // Get all known users
-      let allUsers = [];
-      if (getMongoStatus()) {
-        allUsers = await User.find({}, 'name username _id id');
-      } else {
-        allUsers = memoryStore.users || [];
-      }
-
-      allUsers.forEach(u => {
-        const uid = u._id || u.id;
-        userTotals[u.name] = 0;
-        userSummaryMap[uid] = {
-          user_id: uid,
-          name: u.name,
-          username: u.username,
-          totalTransactions: 0,
-          totalAmount: 0,
-          currentMonthAmount: 0,
-          highestExpense: 0,
-          averageExpense: 0,
-          lastExpenseDate: '-',
-          categoryDistribution: {}
-        };
-      });
-
-      allExpenses.forEach(e => {
-        const uName = e.user_name || 'User';
-        const uid = e.user_id;
-        userTotals[uName] = (userTotals[uName] || 0) + (parseFloat(e.amount) || 0);
-
-        if (userSummaryMap[uid]) {
-          const s = userSummaryMap[uid];
-          const amt = parseFloat(e.amount) || 0;
-          s.totalTransactions += 1;
-          s.totalAmount += amt;
-          if (e.expense_date && e.expense_date.startsWith(currentMonthStr)) {
-            s.currentMonthAmount += amt;
-          }
-          if (amt > s.highestExpense) s.highestExpense = amt;
-          if (s.lastExpenseDate === '-' || (e.expense_date && e.expense_date > s.lastExpenseDate)) {
-            s.lastExpenseDate = e.expense_date;
-          }
-          const cat = e.category || 'Other';
-          s.categoryDistribution[cat] = (s.categoryDistribution[cat] || 0) + amt;
-        }
-      });
-
-      // Compute averages
-      Object.values(userSummaryMap).forEach(s => {
-        s.averageExpense = s.totalTransactions > 0 ? Math.round(s.totalAmount / s.totalTransactions) : 0;
-      });
-    }
-
-    // Monthly breakdown (last 12 months)
+    // Monthly trend for expenses & funds (last 12 months)
     const monthlyTrend = {};
     allExpenses.forEach(e => {
-      if (e.expense_date) {
+      if (e.expense_date && e.expense_date.length >= 7) {
         const m = e.expense_date.slice(0, 7);
         monthlyTrend[m] = (monthlyTrend[m] || 0) + (parseFloat(e.amount) || 0);
       }
     });
 
-    // Daily breakdown for current selected month
-    const dailyTrend = {};
-    allExpenses.forEach(e => {
-      if (e.expense_date && e.expense_date.startsWith(currentMonthStr)) {
-        const day = e.expense_date.slice(8, 10);
-        dailyTrend[day] = (dailyTrend[day] || 0) + (parseFloat(e.amount) || 0);
+    const monthlyFundsTrend = {};
+    allFunds.forEach(f => {
+      if (f.fund_date && f.fund_date.length >= 7) {
+        const m = f.fund_date.slice(0, 7);
+        monthlyFundsTrend[m] = (monthlyFundsTrend[m] || 0) + (parseFloat(f.amount) || 0);
       }
     });
 
-    // Budget information for the current month
-    let budgetAmount = 50000;
-    const targetBgtUser = (role === 'admin' && person && person !== 'all') ? person : (role === 'admin' ? 'global' : userId);
+    // Payment method breakdown
+    const paymentMethodBreakdown = {};
+    allExpenses.forEach(e => {
+      const p = e.payment_method || 'Other';
+      paymentMethodBreakdown[p] = (paymentMethodBreakdown[p] || 0) + (parseFloat(e.amount) || 0);
+    });
 
-    if (getMongoStatus()) {
-      const bgt = await Budget.findOne({ 
-        $or: [
-          { user_id: targetBgtUser, month: currentMonthStr },
-          { user_id: userId, month: currentMonthStr },
-          { user_id: 'global', month: currentMonthStr }
-        ]
+    // Daily spending (current month)
+    const dailySpending = {};
+    monthlyExpenses.forEach(e => {
+      if (e.expense_date) {
+        dailySpending[e.expense_date] = (dailySpending[e.expense_date] || 0) + (parseFloat(e.amount) || 0);
+      }
+    });
+
+    // User comparison (Admin only)
+    const userComparison = {};
+    const userFundComparison = {};
+    let userSummaries = [];
+
+    if (role === 'admin') {
+      const allUsers = await User.find({});
+      allUsers.forEach(u => {
+        userComparison[u.name] = 0;
+        userFundComparison[u.name] = 0;
       });
-      if (bgt) budgetAmount = bgt.budget_amount;
-    } else {
-      const bgtList = memoryStore.budgets || [];
-      const found = bgtList.find(b => 
-        (b.user_id === targetBgtUser || b.user_id === userId || b.user_id === 'global') && b.month === currentMonthStr
-      );
-      if (found) budgetAmount = parseFloat(found.budget_amount) || 50000;
+
+      allExpenses.forEach(e => {
+        const name = e.user_name || 'Other';
+        userComparison[name] = (userComparison[name] || 0) + (parseFloat(e.amount) || 0);
+      });
+
+      allFunds.forEach(f => {
+        const name = f.user_name || 'Other';
+        userFundComparison[name] = (userFundComparison[name] || 0) + (parseFloat(f.amount) || 0);
+      });
+
+      userSummaries = allUsers.map(u => ({
+        _id: u._id,
+        name: u.name,
+        username: u.username,
+        role: u.role,
+        totalSpent: userComparison[u.name] || 0,
+        totalFunds: userFundComparison[u.name] || 0,
+        balance: (userFundComparison[u.name] || 0) - (userComparison[u.name] || 0)
+      }));
     }
 
-    const remainingBudget = Math.max(0, budgetAmount - monthlyExpense);
-    const budgetUsagePercent = budgetAmount > 0 ? Math.round((monthlyExpense / budgetAmount) * 100) : 0;
+    // Fetch Budget Data
+    let monthlyBudget = 0;
+    try {
+      const budgetQuery = targetScope === 'global' ? { user_id: 'global', month: currentMonthStr } : { user_id: targetScope, month: currentMonthStr };
+      const budgetDoc = await Budget.findOne(budgetQuery);
+      if (budgetDoc) {
+        monthlyBudget = parseFloat(budgetDoc.monthly_limit) || 0;
+      }
+    } catch (bErr) {}
 
-    let budgetStatus = 'Safe';
-    if (budgetUsagePercent > 100) budgetStatus = 'Over Budget';
-    else if (budgetUsagePercent >= 90) budgetStatus = 'Near Limit';
-    else if (budgetUsagePercent >= 75) budgetStatus = 'Warning';
+    const remainingBudget = monthlyBudget > 0 ? Math.max(0, monthlyBudget - monthlySpending) : 0;
+    const budgetPercent = monthlyBudget > 0 ? Math.min(100, Math.round((monthlySpending / monthlyBudget) * 100)) : 0;
+    const budgetStatus = monthlyBudget > 0 
+      ? (monthlySpending > monthlyBudget ? 'Over Budget' : (monthlySpending >= monthlyBudget * 0.9 ? 'Near Limit' : 'Within Budget'))
+      : 'Not Set';
+
+    // Interleave Unified Recent Transactions (combining Funds and Expenses)
+    const normalizedExpenses = allExpenses.slice(0, 15).map(e => ({
+      _id: e._id || e.id,
+      id: e.expense_id || e.id,
+      txn_type: 'expense',
+      direction: 'out',
+      title: e.title,
+      person: e.user_name || 'Member',
+      amount: parseFloat(e.amount) || 0,
+      date: e.expense_date,
+      time: e.expense_time || '12:00',
+      category: e.category,
+      payment_method: e.payment_method,
+      vendor: e.vendor || '',
+      notes: e.notes || e.description || '',
+      created_at: e.created_at
+    }));
+
+    const normalizedFunds = allFunds.slice(0, 15).map(f => ({
+      _id: f._id || f.id,
+      id: f.fund_id || f.id,
+      txn_type: 'fund',
+      direction: 'in',
+      title: `Fund from ${f.person_name}`,
+      person: f.person_name,
+      amount: parseFloat(f.amount) || 0,
+      date: f.fund_date,
+      time: '10:00',
+      category: 'Fund / Money In',
+      payment_method: 'Transfer / Cash',
+      vendor: f.person_name,
+      notes: f.notes || '',
+      created_at: f.created_at
+    }));
+
+    const unifiedTransactions = [...normalizedExpenses, ...normalizedFunds]
+      .sort((a, b) => new Date(`${b.date}T${b.time || '00:00'}`) - new Date(`${a.date}T${a.time || '00:00'}`))
+      .slice(0, 15);
+
+    const summaryData = {
+      // Primary Funds & Balance
+      totalFunds,
+      totalFundTransactions,
+      monthlyFunds,
+      todayFunds,
+      fundsByPerson,
+      monthlyFundsTrend,
+
+      // Primary Expense Metrics
+      totalExpense: totalSpending,
+      totalSpending,
+      totalTransactions,
+      monthlyExpense: monthlySpending,
+      monthlySpending,
+      todayExpense: todaySpending,
+      todaySpending,
+      averageExpense: averageSpending,
+      averageSpending,
+      highestExpense,
+      lowestExpense,
+
+      // Core Financial Balance
+      availableBalance,
+      monthlyAvailableBalance,
+
+      // Settlements (Settle Up)
+      settlements: {
+        totalPaid: totalSettlementsPaid,
+        totalReceived: totalSettlementsReceived,
+        net: totalSettlementsReceived - totalSettlementsPaid,
+        pendingCount: pendingSettlementsCount,
+        pendingAmount: pendingSettlementsAmount,
+        settledCount: settledSettlementsCount,
+        settledAmount: settledSettlementsAmount
+      },
+
+      // Budget
+      budgetAmount: monthlyBudget,
+      monthlyBudget,
+      remainingBudget,
+      budgetUsagePercent: budgetPercent,
+      budgetPercent,
+      budgetStatus,
+      isBudgetExceeded: monthlyBudget > 0 && monthlySpending > monthlyBudget,
+      isBudgetWarning: monthlyBudget > 0 && monthlySpending >= monthlyBudget * 0.9,
+
+      // Breakdowns & Trends
+      categoryTotals: categoryBreakdown,
+      categoryBreakdown,
+      monthlyTrend,
+      paymentTotals: paymentMethodBreakdown,
+      paymentMethodBreakdown,
+      dailyTrend: dailySpending,
+      dailySpending,
+      userTotals: userComparison,
+      userComparison,
+      userFundComparison,
+      userSummaries,
+      recentTransactions: unifiedTransactions
+    };
 
     res.json({
       success: true,
-      summary: {
-        totalExpense,
-        totalTransactions: totalCount,
-        averageExpense,
-        highestExpense,
-        lowestExpense,
-        todayExpense,
-        monthlyExpense,
-        currentMonth: currentMonthStr,
-        budgetAmount,
-        remainingBudget,
-        budgetUsagePercent,
-        budgetStatus,
-        categoryTotals,
-        paymentTotals,
-        userTotals,
-        userSummaries: Object.values(userSummaryMap),
-        monthlyTrend,
-        dailyTrend
-      }
+      summary: summaryData,
+      metrics: summaryData
     });
   } catch (error) {
-    console.error('Summary metrics error:', error);
-    res.status(500).json({ success: false, message: 'Error calculating metrics.' });
+    console.error('Error in getSummaryMetrics:', error);
+    res.status(500).json({ success: false, message: 'Server error compiling financial analytics.' });
   }
 };
 
+// Export to PDF
 const exportPDF = async (req, res) => {
   try {
-    const expenses = await getFilteredExpenses(req);
-    const user = req.user;
+    const entity = req.query.entity || 'expenses';
 
-    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    if (entity === 'funds') {
+      const funds = await getFilteredFunds(req);
+      const doc = new PDFDocument({ margin: 30, size: 'A4' });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=Funds_Statement_${Date.now()}.pdf`);
+      doc.pipe(res);
+
+      doc.fontSize(20).fillColor('#059669').text('Smart Personal Expense Management', { align: 'center' });
+      doc.fontSize(12).fillColor('#64748b').text('Funds / Money In Statement', { align: 'center' });
+      doc.moveDown(0.5);
+
+      const generatedOn = new Date().toLocaleDateString('en-IN', {
+        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      doc.fontSize(9).fillColor('#475569')
+        .text(`Generated On: ${generatedOn} | Requested By: ${req.user.name} (${req.user.role.toUpperCase()})`, { align: 'center' });
+      doc.moveDown(1);
+
+      const totalAmt = funds.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+
+      // Summary Box
+      doc.rect(30, doc.y, 535, 45).fillAndStroke('#ecfdf5', '#a7f3d0');
+      const boxY = doc.y + 12;
+      doc.fillColor('#065f46').fontSize(11).font('Helvetica-Bold')
+        .text(`Total Records: ${funds.length}`, 45, boxY)
+        .text(`Total Funds Added: +Rs. ${totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 300, boxY);
+      doc.moveDown(3);
+
+      const tableTop = doc.y;
+      doc.rect(30, tableTop, 535, 20).fill('#059669');
+      doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+      doc.text('Fund ID', 35, tableTop + 5, { width: 90 });
+      doc.text('Date', 130, tableTop + 5, { width: 65 });
+      doc.text('Person Name', 200, tableTop + 5, { width: 120 });
+      doc.text('Notes', 325, tableTop + 5, { width: 140 });
+      doc.text('Amount (Rs)', 470, tableTop + 5, { width: 90, align: 'right' });
+
+      let y = tableTop + 24;
+      doc.font('Helvetica').fontSize(8).fillColor('#1e293b');
+
+      funds.forEach((item, index) => {
+        if (y > 750) {
+          doc.addPage();
+          y = 40;
+        }
+        if (index % 2 === 1) {
+          doc.rect(30, y - 2, 535, 18).fill('#f8fafc');
+          doc.fillColor('#1e293b');
+        }
+
+        doc.text(item.fund_id || item.id || '-', 35, y, { width: 90 });
+        doc.text(item.fund_date || '-', 130, y, { width: 65 });
+        doc.text(item.person_name || '-', 200, y, { width: 120, ellipsis: true });
+        doc.text(item.notes || '-', 325, y, { width: 140, ellipsis: true });
+        doc.fillColor('#059669').text(`+${(parseFloat(item.amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 470, y, { width: 90, align: 'right' });
+        doc.fillColor('#1e293b');
+
+        y += 18;
+      });
+
+      doc.end();
+      return;
+    }
+
+    if (entity === 'settlements') {
+      const settlements = await getFilteredSettlements(req);
+      const doc = new PDFDocument({ margin: 30, size: 'A4' });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=Settlements_Statement_${Date.now()}.pdf`);
+      doc.pipe(res);
+
+      doc.fontSize(20).fillColor('#4f46e5').text('Smart Personal Expense Management', { align: 'center' });
+      doc.fontSize(12).fillColor('#64748b').text('Settle Up Statement', { align: 'center' });
+      doc.moveDown(0.5);
+
+      const generatedOn = new Date().toLocaleDateString('en-IN', {
+        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      doc.fontSize(9).fillColor('#475569')
+        .text(`Generated On: ${generatedOn} | Requested By: ${req.user.name} (${req.user.role.toUpperCase()})`, { align: 'center' });
+      doc.moveDown(1);
+
+      let totalPaid = 0;
+      let totalReceived = 0;
+      settlements.forEach(s => {
+        const amt = parseFloat(s.amount) || 0;
+        if (s.settlement_type === 'Paid') totalPaid += amt;
+        else totalReceived += amt;
+      });
+
+      doc.rect(30, doc.y, 535, 45).fillAndStroke('#eef2ff', '#c7d2fe');
+      const boxY = doc.y + 12;
+      doc.fillColor('#3730a3').fontSize(10).font('Helvetica-Bold')
+        .text(`Records: ${settlements.length}`, 45, boxY)
+        .text(`Paid: Rs. ${totalPaid.toLocaleString('en-IN')}`, 170, boxY)
+        .text(`Received: Rs. ${totalReceived.toLocaleString('en-IN')}`, 320, boxY)
+        .text(`Net: Rs. ${(totalReceived - totalPaid).toLocaleString('en-IN')}`, 440, boxY);
+      doc.moveDown(3);
+
+      const tableTop = doc.y;
+      doc.rect(30, tableTop, 535, 20).fill('#4f46e5');
+      doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+      doc.text('ID', 35, tableTop + 5, { width: 85 });
+      doc.text('Date', 125, tableTop + 5, { width: 55 });
+      doc.text('Person Name', 185, tableTop + 5, { width: 110 });
+      doc.text('Type', 300, tableTop + 5, { width: 60 });
+      doc.text('Status', 365, tableTop + 5, { width: 55 });
+      doc.text('Amount (Rs)', 470, tableTop + 5, { width: 90, align: 'right' });
+
+      let y = tableTop + 24;
+      doc.font('Helvetica').fontSize(8).fillColor('#1e293b');
+
+      settlements.forEach((item, index) => {
+        if (y > 750) {
+          doc.addPage();
+          y = 40;
+        }
+        if (index % 2 === 1) {
+          doc.rect(30, y - 2, 535, 18).fill('#f8fafc');
+          doc.fillColor('#1e293b');
+        }
+
+        doc.text(item.settlement_id || item.id || '-', 35, y, { width: 85 });
+        doc.text(item.settlement_date || '-', 125, y, { width: 55 });
+        doc.text(item.person_name || '-', 185, y, { width: 110, ellipsis: true });
+        doc.text(item.settlement_type || '-', 300, y, { width: 60 });
+        doc.text(item.status || '-', 365, y, { width: 55 });
+        doc.text((parseFloat(item.amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }), 470, y, { width: 90, align: 'right' });
+
+        y += 18;
+      });
+
+      doc.end();
+      return;
+    }
+
+    // Default: Expenses PDF
+    const expenses = await getFilteredExpenses(req);
+    const doc = new PDFDocument({ margin: 30, size: 'A4' });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=Expense_Statement_${Date.now()}.pdf`);
 
     doc.pipe(res);
 
-    // Title & Branding
-    doc.fillColor('#1E3A8A').fontSize(20).text('Smart Personal Expense Management System', { align: 'center' });
-    doc.fillColor('#64748B').fontSize(10).text(`Expense Statement | Generated on ${new Date().toLocaleString()}`, { align: 'center' });
+    doc.fontSize(20).fillColor('#1e40af').text('Smart Personal Expense Management', { align: 'center' });
+    doc.fontSize(12).fillColor('#64748b').text('Financial Statement Report', { align: 'center' });
+    doc.moveDown(0.5);
+
+    const generatedOn = new Date().toLocaleDateString('en-IN', {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    doc.fontSize(9).fillColor('#475569')
+      .text(`Generated On: ${generatedOn} | Requested By: ${req.user.name} (${req.user.role.toUpperCase()})`, { align: 'center' });
     doc.moveDown(1);
 
-    // Summary Box
-    const totalAmount = expenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-    const avgAmount = expenses.length > 0 ? Math.round(totalAmount / expenses.length) : 0;
+    const totalAmt = expenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
-    doc.rect(40, doc.y, 515, 55).fillAndStroke('#F1F5F9', '#CBD5E1');
-    const boxY = doc.y + 10;
-    doc.fillColor('#0F172A').fontSize(10);
-    doc.text(`Account: ${user.name} (${user.role.toUpperCase()})`, 55, boxY);
-    doc.text(`Total Transactions: ${expenses.length}`, 55, boxY + 16);
-    doc.text(`Total Spending: ₹${totalAmount.toLocaleString('en-IN')}`, 300, boxY);
-    doc.text(`Average Transaction: ₹${avgAmount.toLocaleString('en-IN')}`, 300, boxY + 16);
+    doc.rect(30, doc.y, 535, 45).fillAndStroke('#eff6ff', '#bfdbfe');
+    const boxY = doc.y + 12;
+    doc.fillColor('#1e3a8a').fontSize(11).font('Helvetica-Bold')
+      .text(`Total Records: ${expenses.length}`, 45, boxY)
+      .text(`Total Expenditure: Rs. ${totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 320, boxY);
+    doc.moveDown(3);
 
-    doc.y = boxY + 45;
-    doc.moveDown(1);
+    const tableTop = doc.y;
+    doc.rect(30, tableTop, 535, 20).fill('#1e40af');
+    doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+    doc.text('ID', 35, tableTop + 5, { width: 85 });
+    doc.text('Date', 125, tableTop + 5, { width: 55 });
+    doc.text('Title & Vendor', 185, tableTop + 5, { width: 140 });
+    doc.text('Member', 330, tableTop + 5, { width: 65 });
+    doc.text('Category', 400, tableTop + 5, { width: 75 });
+    doc.text('Amount (Rs)', 480, tableTop + 5, { width: 80, align: 'right' });
 
-    // Table Header
-    const yStart = doc.y;
-    doc.rect(40, yStart, 515, 20).fill('#2563EB');
-    doc.fillColor('#FFFFFF').fontSize(9).font('Helvetica-Bold');
-    doc.text('Date', 45, yStart + 5, { width: 65 });
-    doc.text('Expense Title', 115, yStart + 5, { width: 130 });
-    doc.text('Category', 250, yStart + 5, { width: 85 });
-    doc.text('User', 340, yStart + 5, { width: 75 });
-    doc.text('Payment', 420, yStart + 5, { width: 65 });
-    doc.text('Amount (₹)', 490, yStart + 5, { width: 60, align: 'right' });
+    let y = tableTop + 24;
+    doc.font('Helvetica').fontSize(8).fillColor('#1e293b');
 
-    doc.font('Helvetica');
-    doc.y = yStart + 25;
-
-    // Rows
-    expenses.forEach((item, idx) => {
-      if (doc.y > 750) {
+    expenses.forEach((item, index) => {
+      if (y > 750) {
         doc.addPage();
-        doc.y = 40;
-      }
-      const y = doc.y;
-      if (idx % 2 === 1) {
-        doc.rect(40, y - 2, 515, 18).fill('#F8FAFC');
+        y = 40;
       }
 
-      doc.fillColor('#334155').fontSize(8.5);
-      doc.text(item.expense_date || '-', 45, y, { width: 65 });
-      doc.text(item.title || '-', 115, y, { width: 130 });
-      doc.text(item.category || '-', 250, y, { width: 85 });
-      doc.text(item.user_name || '-', 340, y, { width: 75 });
-      doc.text(item.payment_method || '-', 420, y, { width: 65 });
-      doc.text(`₹${(parseFloat(item.amount) || 0).toLocaleString('en-IN')}`, 490, y, { width: 60, align: 'right' });
-      doc.moveDown(0.5);
+      if (index % 2 === 1) {
+        doc.rect(30, y - 2, 535, 18).fill('#f8fafc');
+        doc.fillColor('#1e293b');
+      }
+
+      doc.text(item.expense_id || item.id || '-', 35, y, { width: 85 });
+      doc.text(item.expense_date || '-', 125, y, { width: 55 });
+      const titleVendor = item.vendor ? `${item.title} (${item.vendor})` : item.title;
+      doc.text(titleVendor, 185, y, { width: 140, ellipsis: true });
+      doc.text(item.user_name || '-', 330, y, { width: 65, ellipsis: true });
+      doc.text(item.category || '-', 400, y, { width: 75 });
+      doc.text((parseFloat(item.amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }), 480, y, { width: 80, align: 'right' });
+
+      y += 18;
     });
 
     doc.end();
   } catch (error) {
     console.error('PDF export error:', error);
-    res.status(500).json({ success: false, message: 'Failed to generate PDF statement.' });
+    res.status(500).json({ success: false, message: 'Error generating PDF statement.' });
   }
 };
 
+// Export to Excel
 const exportExcel = async (req, res) => {
   try {
+    const entity = req.query.entity || 'expenses';
+
+    if (entity === 'funds') {
+      const funds = await getFilteredFunds(req);
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Funds Records');
+
+      worksheet.columns = [
+        { header: 'Fund ID', key: 'fund_id', width: 22 },
+        { header: 'Date', key: 'fund_date', width: 14 },
+        { header: 'Person Name', key: 'person_name', width: 25 },
+        { header: 'Amount (INR)', key: 'amount', width: 18 },
+        { header: 'Created By', key: 'user_name', width: 20 },
+        { header: 'Notes', key: 'notes', width: 35 }
+      ];
+
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+      worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+      funds.forEach(f => {
+        worksheet.addRow({
+          fund_id: f.fund_id || f.id,
+          fund_date: f.fund_date,
+          person_name: f.person_name,
+          amount: parseFloat(f.amount) || 0,
+          user_name: f.user_name || f.created_by,
+          notes: f.notes
+        });
+      });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=Funds_Statement_${Date.now()}.xlsx`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    }
+
+    if (entity === 'settlements') {
+      const settlements = await getFilteredSettlements(req);
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Settlement Records');
+
+      worksheet.columns = [
+        { header: 'Settlement ID', key: 'settlement_id', width: 22 },
+        { header: 'Date', key: 'settlement_date', width: 14 },
+        { header: 'Person Name', key: 'person_name', width: 25 },
+        { header: 'Type', key: 'settlement_type', width: 14 },
+        { header: 'Status', key: 'status', width: 14 },
+        { header: 'Amount (INR)', key: 'amount', width: 18 },
+        { header: 'Created By', key: 'user_name', width: 20 },
+        { header: 'Notes', key: 'notes', width: 35 }
+      ];
+
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+      worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+      settlements.forEach(s => {
+        worksheet.addRow({
+          settlement_id: s.settlement_id || s.id,
+          settlement_date: s.settlement_date,
+          person_name: s.person_name,
+          settlement_type: s.settlement_type,
+          status: s.status,
+          amount: parseFloat(s.amount) || 0,
+          user_name: s.user_name || s.created_by,
+          notes: s.notes
+        });
+      });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=Settlements_Statement_${Date.now()}.xlsx`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    }
+
+    // Default: Expenses Excel
     const expenses = await getFilteredExpenses(req);
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Expenses');
+    const worksheet = workbook.addWorksheet('Expense Records');
 
     worksheet.columns = [
-      { header: 'Expense ID', key: 'expense_id', width: 20 },
-      { header: 'User', key: 'user_name', width: 16 },
+      { header: 'Expense ID', key: 'expense_id', width: 22 },
       { header: 'Date', key: 'expense_date', width: 14 },
       { header: 'Time', key: 'expense_time', width: 10 },
-      { header: 'Title', key: 'title', width: 25 },
+      { header: 'Title', key: 'title', width: 28 },
+      { header: 'Description', key: 'description', width: 30 },
       { header: 'Category', key: 'category', width: 18 },
-      { header: 'Amount (₹)', key: 'amount', width: 16 },
+      { header: 'Amount (INR)', key: 'amount', width: 16 },
       { header: 'Payment Method', key: 'payment_method', width: 18 },
-      { header: 'Vendor', key: 'vendor', width: 20 },
-      { header: 'Location', key: 'location', width: 20 },
-      { header: 'Description', key: 'description', width: 28 },
-      { header: 'Notes', key: 'notes', width: 28 }
+      { header: 'Member Name', key: 'user_name', width: 18 },
+      { header: 'Vendor', key: 'vendor', width: 22 },
+      { header: 'Location', key: 'location', width: 18 },
+      { header: 'Notes', key: 'notes', width: 24 }
     ];
 
-    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
-    worksheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: '1E40AF' }
-    };
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E40AF' } };
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
-    expenses.forEach(e => {
+    expenses.forEach(exp => {
       worksheet.addRow({
-        expense_id: e.expense_id,
-        user_name: e.user_name || '',
-        expense_date: e.expense_date,
-        expense_time: e.expense_time || '',
-        title: e.title,
-        category: e.category,
-        amount: parseFloat(e.amount) || 0,
-        payment_method: e.payment_method || '',
-        vendor: e.vendor || '',
-        location: e.location || '',
-        description: e.description || '',
-        notes: e.notes || ''
+        expense_id: exp.expense_id || exp.id,
+        expense_date: exp.expense_date,
+        expense_time: exp.expense_time,
+        title: exp.title,
+        description: exp.description,
+        category: exp.category,
+        amount: parseFloat(exp.amount) || 0,
+        payment_method: exp.payment_method,
+        user_name: exp.user_name,
+        vendor: exp.vendor,
+        location: exp.location,
+        notes: exp.notes
       });
     });
 
@@ -424,55 +850,97 @@ const exportExcel = async (req, res) => {
     res.end();
   } catch (error) {
     console.error('Excel export error:', error);
-    res.status(500).json({ success: false, message: 'Failed to generate Excel report.' });
+    res.status(500).json({ success: false, message: 'Error generating Excel export.' });
   }
 };
 
+// Export to CSV
 const exportCSV = async (req, res) => {
   try {
+    const entity = req.query.entity || 'expenses';
+
+    const escapeVal = (val) => {
+      const str = String(val || '');
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    if (entity === 'funds') {
+      const funds = await getFilteredFunds(req);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=Funds_Statement_${Date.now()}.csv`);
+
+      const headers = ['Fund ID', 'Date', 'Person Name', 'Amount', 'Created By', 'Notes'];
+      let csvContent = headers.join(',') + '\n';
+
+      funds.forEach(f => {
+        const row = [
+          escapeVal(f.fund_id || f.id),
+          escapeVal(f.fund_date),
+          escapeVal(f.person_name),
+          parseFloat(f.amount) || 0,
+          escapeVal(f.user_name || f.created_by),
+          escapeVal(f.notes)
+        ];
+        csvContent += row.join(',') + '\n';
+      });
+
+      return res.send(csvContent);
+    }
+
+    if (entity === 'settlements') {
+      const settlements = await getFilteredSettlements(req);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=Settlements_Statement_${Date.now()}.csv`);
+
+      const headers = ['Settlement ID', 'Date', 'Person Name', 'Type', 'Status', 'Amount', 'Created By', 'Notes'];
+      let csvContent = headers.join(',') + '\n';
+
+      settlements.forEach(s => {
+        const row = [
+          escapeVal(s.settlement_id || s.id),
+          escapeVal(s.settlement_date),
+          escapeVal(s.person_name),
+          escapeVal(s.settlement_type),
+          escapeVal(s.status),
+          parseFloat(s.amount) || 0,
+          escapeVal(s.user_name || s.created_by),
+          escapeVal(s.notes)
+        ];
+        csvContent += row.join(',') + '\n';
+      });
+
+      return res.send(csvContent);
+    }
+
+    // Default: Expenses CSV
     const expenses = await getFilteredExpenses(req);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=Expense_Statement_${Date.now()}.csv`);
 
-    const headers = [
-      'Expense ID',
-      'User',
-      'Date',
-      'Time',
-      'Title',
-      'Category',
-      'Amount (INR)',
-      'Payment Method',
-      'Vendor',
-      'Location',
-      'Description',
-      'Notes'
-    ];
-
+    const headers = ['Expense ID', 'Date', 'Time', 'Title', 'Category', 'Amount', 'Payment Method', 'Member', 'Vendor', 'Location', 'Notes'];
     let csvContent = headers.join(',') + '\n';
 
-    expenses.forEach(e => {
+    expenses.forEach(exp => {
       const row = [
-        `"${e.expense_id}"`,
-        `"${(e.user_name || '').replace(/"/g, '""')}"`,
-        `"${e.expense_date}"`,
-        `"${e.expense_time || ''}"`,
-        `"${(e.title || '').replace(/"/g, '""')}"`,
-        `"${(e.category || '').replace(/"/g, '""')}"`,
-        parseFloat(e.amount) || 0,
-        `"${e.payment_method || ''}"`,
-        `"${(e.vendor || '').replace(/"/g, '""')}"`,
-        `"${(e.location || '').replace(/"/g, '""')}"`,
-        `"${(e.description || '').replace(/"/g, '""')}"`,
-        `"${(e.notes || '').replace(/"/g, '""')}"`
+        escapeVal(exp.expense_id || exp.id),
+        escapeVal(exp.expense_date),
+        escapeVal(exp.expense_time),
+        escapeVal(exp.title),
+        escapeVal(exp.category),
+        parseFloat(exp.amount) || 0,
+        escapeVal(exp.payment_method),
+        escapeVal(exp.user_name),
+        escapeVal(exp.vendor),
+        escapeVal(exp.location),
+        escapeVal(exp.notes)
       ];
       csvContent += row.join(',') + '\n';
     });
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=Expense_Statement_${Date.now()}.csv`);
     res.send(csvContent);
   } catch (error) {
     console.error('CSV export error:', error);
-    res.status(500).json({ success: false, message: 'Failed to generate CSV export.' });
+    res.status(500).json({ success: false, message: 'Error generating CSV export.' });
   }
 };
 

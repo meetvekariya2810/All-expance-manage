@@ -11,7 +11,11 @@ const activityLogSchema = new mongoose.Schema({
   details: { type: String, default: '' },
   type: {
     type: String,
-    enum: ['create', 'update', 'delete', 'budget', 'category', 'profile', 'info'],
+    enum: [
+      'create', 'update', 'delete', 'budget', 'category', 'profile', 'info',
+      'fund_create', 'fund_update', 'fund_delete',
+      'settlement_create', 'settlement_update', 'settlement_delete', 'settlement_status'
+    ],
     default: 'info'
   },
   timestamp: { type: Date, default: Date.now, index: true }
