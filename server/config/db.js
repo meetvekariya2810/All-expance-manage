@@ -3,7 +3,12 @@ const path = require('path');
 const fs = require('fs');
 
 try {
+  require('dns').setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {}
+
+try {
   require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+  require('dotenv').config({ path: path.join(__dirname, '../../.env.local') });
 } catch (e) {}
 
 // Disable Mongoose command buffering so queries fail fast when connection is down
@@ -386,10 +391,37 @@ const connectDB = async () => {
 
 const getMongoStatus = () => isMongoConnected && mongoose.connection.readyState === 1;
 
-// Legacy compatibility helpers (ensuring no memory store overwriting)
+// Local store initialization for instant automatic fallback
 const memoryStore = { users: [], expenses: [], categories: [], budgets: [], activityLogs: [] };
-const saveLocalStore = () => {};
-const loadLocalStore = () => {};
+const loadLocalStore = () => {
+  try {
+    const candidates = [
+      path.join(__dirname, '../../data_store.json'),
+      path.join(__dirname, '../../data_store.backup.json')
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        const raw = fs.readFileSync(p, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.users && parsed.users.length > 0) {
+          memoryStore.users = parsed.users || [];
+          memoryStore.expenses = parsed.expenses || [];
+          memoryStore.categories = parsed.categories || [];
+          memoryStore.budgets = parsed.budgets || [];
+          memoryStore.activityLogs = parsed.activityLogs || [];
+          break;
+        }
+      }
+    }
+  } catch (e) {}
+};
+loadLocalStore();
+const saveLocalStore = () => {
+  try {
+    const p = path.join(__dirname, '../../data_store.json');
+    fs.writeFileSync(p, JSON.stringify(memoryStore, null, 2), 'utf8');
+  } catch (e) {}
+};
 const syncExpenseStore = (action, payload) => {
   if (action === 'delete' && payload) {
     recordDeletedExpenseId(payload);

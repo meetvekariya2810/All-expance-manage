@@ -39,6 +39,11 @@ app.use('/api', async (req, res, next) => {
     }
   }
 
+  // Allow authentication endpoints to proceed with automatic local fallback if MongoDB is connecting/offline
+  if (!getMongoStatus() && req.path.startsWith('/auth')) {
+    return next();
+  }
+
   if (!getMongoStatus()) {
     const diagnostic = getDiagnosticInfo();
     return res.status(503).json({
