@@ -12,3 +12,4 @@ yarn-error.log*
 .vercel
 scratch/
 .mongo_data/
+.env*
