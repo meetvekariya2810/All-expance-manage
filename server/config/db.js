@@ -180,6 +180,43 @@ const sanitizeUri = (raw) => {
   if ((uri.startsWith('"') && uri.endsWith('"')) || (uri.startsWith("'") && uri.endsWith("'"))) {
     uri = uri.slice(1, -1).trim();
   }
+
+  // Handle encoding special characters in password and ensuring database name
+  const match = uri.match(/^(mongodb(?:\+srv)?:\/\/)(.*)$/i);
+  if (match) {
+    const scheme = match[1];
+    let rest = match[2];
+    const lastAt = rest.lastIndexOf('@');
+    if (lastAt !== -1) {
+      const auth = rest.substring(0, lastAt);
+      let hostAndRest = rest.substring(lastAt + 1);
+      const colonIdx = auth.indexOf(':');
+      if (colonIdx !== -1) {
+        const username = auth.substring(0, colonIdx);
+        let password = auth.substring(colonIdx + 1);
+        try {
+          password = decodeURIComponent(password);
+        } catch (e) {}
+        const encodedPassword = encodeURIComponent(password);
+
+        // Ensure database name if missing or root
+        if (hostAndRest.includes('?')) {
+          const parts = hostAndRest.split('?');
+          let hostPart = parts[0];
+          const query = parts.slice(1).join('?');
+          if (!hostPart.includes('/') || hostPart.endsWith('/')) {
+            hostPart = hostPart.replace(/\/+$/, '') + '/expense_tracker';
+          }
+          hostAndRest = hostPart + '?' + query;
+        } else if (!hostPart.includes('/')) {
+          hostAndRest = hostAndRest + '/expense_tracker';
+        }
+
+        uri = scheme + username + ':' + encodedPassword + '@' + hostAndRest;
+      }
+    }
+  }
+
   return uri;
 };
 
