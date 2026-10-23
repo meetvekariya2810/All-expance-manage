@@ -38,5 +38,12 @@ export const expenseService = {
   async clearAllExpenses(person) {
     const res = await api.delete('/expenses/clear-all', { params: { person } });
     return res.data;
+  },
+
+  async importExpenses(formData) {
+    const res = await api.post('/expenses/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return res.data;
   }
 };

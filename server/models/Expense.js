@@ -20,8 +20,8 @@ const expenseSchema = new mongoose.Schema({
   location: { type: String, default: '', trim: true },
   receipt: { type: String, default: '' },
   notes: { type: String, default: '', trim: true },
-  expense_date: { type: String, required: true, index: true }, // Format: YYYY-MM-DD
-  expense_time: { type: String, required: true },             // Format: HH:mm
+  expense_date: { type: String, default: 'Undated', index: true }, // Format: YYYY-MM-DD or 'Undated'
+  expense_time: { type: String, default: '12:00' },             // Format: HH:mm
   created_at: { type: Date, default: Date.now, index: true },
   updated_at: { type: Date, default: Date.now }
 }, {

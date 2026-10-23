@@ -8,9 +8,10 @@ import { reportService } from '../services/reportService';
 import { formatINR, formatDate, PAYMENT_METHODS, DATE_PRESETS, SORT_OPTIONS } from '../utils/constants';
 import ExpenseDetailsModal from '../components/ExpenseDetailsModal';
 import ReceiptModal from '../components/ReceiptModal';
+import ImportExcelModal from '../components/ImportExcelModal';
 
 export default function ExpenseListPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -45,6 +46,7 @@ export default function ExpenseListPage() {
   const [activeExpenseDetails, setActiveExpenseDetails] = useState(null);
   const [activeReceiptUrl, setActiveReceiptUrl] = useState(null);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   // Debounce search timer ref
   const searchTimeoutRef = useRef(null);
@@ -304,6 +306,13 @@ export default function ExpenseListPage() {
           )}
           <button className="btn btn-outline-danger" onClick={handleEraseAll}>
             <i className="fa-solid fa-broom me-1"></i> Erase All
+          </button>
+          <button
+            className="btn btn-outline-success"
+            onClick={() => setImportModalOpen(true)}
+            title="Import Excel Expense Entries"
+          >
+            <i className="fa-solid fa-file-excel me-1"></i> Import Excel
           </button>
           <button className="btn btn-primary-custom" onClick={() => navigate('/expenses/new')}>
             <i className="fa-solid fa-plus me-1"></i> Add Expense
@@ -691,6 +700,14 @@ export default function ExpenseListPage() {
         receiptUrl={activeReceiptUrl}
         onClose={() => setActiveReceiptUrl(null)}
       />
+
+      {importModalOpen && (
+        <ImportExcelModal
+          onClose={() => setImportModalOpen(false)}
+          onSuccess={() => fetchExpenses()}
+          currentUser={user}
+        />
+      )}
     </div>
   );
 }
