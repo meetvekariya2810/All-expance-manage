@@ -247,6 +247,7 @@ const App = {
 
     if (viewId === 'dashboard') this.loadDashboardData();
     if (viewId === 'expense-list') this.loadExpenses();
+    if (viewId === 'bulk-import-export') this.initBulkImportExport();
     if (viewId === 'funds') this.loadFunds();
     if (viewId === 'settlements') this.loadSettlements();
     if (viewId === 'reports') this.loadReportsData();
@@ -1951,5 +1952,291 @@ const App = {
     } else {
       this.showToast(res.message || 'Failed to delete settlement.', 'error');
     }
+  },
+
+  // ==========================================================================
+  // BULK IMPORT & EXPORT MODULE
+  // ==========================================================================
+  bulkFile: null,
+  bulkSessionToken: null,
+
+  initBulkImportExport() {
+    this.populateBulkExportCategories();
+  },
+
+  populateBulkExportCategories() {
+    const sel = document.getElementById('bulkExportCategory');
+    if (!sel || !this.allCategories) return;
+    sel.innerHTML = '<option value="all">All Categories</option>';
+    this.allCategories.forEach(c => {
+      const name = c.category_name || c;
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+  },
+
+  switchBulkSubTab(tab) {
+    ['import', 'export', 'history'].forEach(t => {
+      const btn = document.getElementById(`tabBulk${t.charAt(0).toUpperCase() + t.slice(1)}Btn`);
+      const pane = document.getElementById(`bulkSubTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+      if (btn) btn.classList.toggle('active', t === tab);
+      if (pane) {
+        if (t === tab) {
+          pane.classList.remove('d-none');
+          pane.classList.add('fade', 'show');
+        } else {
+          pane.classList.add('d-none');
+          pane.classList.remove('fade', 'show');
+        }
+      }
+    });
+
+    if (tab === 'history') {
+      this.loadBulkImportHistory();
+    }
+  },
+
+  handleBulkFileSelect(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['xlsx', 'xls', 'csv'].includes(ext)) {
+      this.showToast('Please upload .xlsx, .xls, or .csv', 'error');
+      return;
+    }
+
+    this.bulkFile = file;
+    this.bulkSessionToken = null;
+
+    const info = document.getElementById('bulkSelectedFileInfo');
+    const nameEl = document.getElementById('bulkFileName');
+    const sizeEl = document.getElementById('bulkFileSize');
+    if (info) info.classList.remove('d-none');
+    if (info) info.classList.add('d-flex');
+    if (nameEl) nameEl.textContent = file.name;
+    if (sizeEl) sizeEl.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+
+    const confirmBtn = document.getElementById('btnConfirmBulkImport');
+    if (confirmBtn) confirmBtn.disabled = true;
+
+    this.showToast(`Selected "${file.name}". Click "Validate File" to inspect.`, 'info');
+  },
+
+  clearBulkFile() {
+    this.bulkFile = null;
+    this.bulkSessionToken = null;
+    const fileInput = document.getElementById('bulkFileInput');
+    if (fileInput) fileInput.value = '';
+
+    const info = document.getElementById('bulkSelectedFileInfo');
+    if (info) {
+      info.classList.add('d-none');
+      info.classList.remove('d-flex');
+    }
+
+    const previewCard = document.getElementById('bulkPreviewCard');
+    if (previewCard) previewCard.classList.add('d-none');
+
+    const confirmBtn = document.getElementById('btnConfirmBulkImport');
+    if (confirmBtn) confirmBtn.disabled = true;
+
+    ['statBulkDetected', 'statBulkValid', 'statBulkInvalid', 'statBulkDuplicate'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '0';
+    });
+    const amtEl = document.getElementById('statBulkValidAmount');
+    if (amtEl) amtEl.textContent = '₹0.00 valid';
+  },
+
+  async downloadExcelTemplate() {
+    ExportManager.downloadWithAuth('/api/expenses/import/template', 'Expense_Import_Template.xlsx');
+  },
+
+  async downloadCsvTemplate() {
+    ExportManager.downloadWithAuth('/api/expenses/import/template.csv', 'Expense_Import_Template.csv');
+  },
+
+  async validateBulkImportFile() {
+    if (!this.bulkFile) {
+      this.showToast('Please choose an Excel or CSV file first.', 'warning');
+      return;
+    }
+
+    const btn = document.getElementById('btnValidateBulkFile');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Validating...';
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('file', this.bulkFile);
+
+      const token = Auth.getToken();
+      const res = await fetch('/api/expenses/import/validate', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+
+      const data = await res.json();
+      if (data.success && data.data) {
+        const d = data.data;
+        this.bulkSessionToken = d.sessionToken;
+
+        document.getElementById('statBulkDetected').textContent = d.totalRows;
+        document.getElementById('statBulkValid').textContent = d.validRows;
+        document.getElementById('statBulkInvalid').textContent = d.invalidRows;
+        document.getElementById('statBulkDuplicate').textContent = d.duplicateRows;
+        document.getElementById('statBulkValidAmount').textContent = `₹${(d.totalValidAmount || 0).toLocaleString('en-IN')}`;
+
+        // Render preview table
+        const tbody = document.getElementById('bulkPreviewTableBody');
+        if (tbody) {
+          tbody.innerHTML = '';
+          (d.preview || []).forEach((row, i) => {
+            const tr = document.createElement('tr');
+            if (row.status === 'invalid') tr.className = 'table-danger';
+            if (row.status === 'duplicate') tr.className = 'table-warning';
+
+            tr.innerHTML = `
+              <td>${row.rowNumber || i + 1}</td>
+              <td>${row.date || 'Undated'}</td>
+              <td class="fw-semibold">${row.title}</td>
+              <td><span class="badge bg-info-subtle text-info-emphasis">${row.category}</span></td>
+              <td class="text-end fw-bold">₹${(parseFloat(row.amount) || 0).toLocaleString('en-IN')}</td>
+              <td><span class="badge bg-light text-dark border">${row.payment_method}</span></td>
+              <td class="text-center">
+                <span class="badge bg-${row.status === 'valid' ? 'success' : (row.status === 'duplicate' ? 'warning text-dark' : 'danger')}">
+                  ${row.status}
+                </span>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+
+        const previewCard = document.getElementById('bulkPreviewCard');
+        if (previewCard) previewCard.classList.remove('d-none');
+
+        const confirmBtn = document.getElementById('btnConfirmBulkImport');
+        if (confirmBtn) confirmBtn.disabled = d.validRows === 0;
+
+        this.showToast(`Validation complete: ${d.validRows} valid rows found.`, 'success');
+      } else {
+        this.showToast(data.message || 'Validation failed.', 'error');
+      }
+    } catch (err) {
+      this.showToast('Error validating file: ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-magnifying-glass-chart me-1"></i> Validate File';
+      }
+    }
+  },
+
+  async confirmBulkImport() {
+    if (!this.bulkSessionToken) {
+      this.showToast('Please validate your file first.', 'warning');
+      return;
+    }
+
+    const skipDup = document.getElementById('bulkSkipDuplicatesCheck')?.checked ?? true;
+    const btn = document.getElementById('btnConfirmBulkImport');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span> Importing...';
+    }
+
+    try {
+      const res = await this.apiRequest('/api/expenses/import/confirm', 'POST', {
+        sessionToken: this.bulkSessionToken,
+        skipDuplicates: skipDup
+      });
+
+      if (res.success) {
+        this.showToast('Import completed successfully! Redirecting to Expense Records...', 'success');
+        this.clearBulkFile();
+        setTimeout(() => {
+          this.switchView('expense-list');
+          this.loadExpenses();
+          this.loadDashboardData();
+        }, 1200);
+      } else {
+        this.showToast(res.message || 'Import failed.', 'error');
+      }
+    } catch (err) {
+      this.showToast('Import error: ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up me-1"></i> Import Valid Records';
+      }
+    }
+  },
+
+  async loadBulkImportHistory() {
+    const tbody = document.getElementById('bulkHistoryTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colSpan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm me-2"></span> Loading batches...</td></tr>';
+
+    try {
+      const res = await this.apiRequest('/api/expenses/import/history?limit=10', 'GET');
+      if (res.success && res.data && res.data.length > 0) {
+        tbody.innerHTML = '';
+        res.data.forEach(b => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><code>${b.batch_id}</code></td>
+            <td>${b.initiated_by_name}</td>
+            <td class="text-truncate" style="max-width: 140px;">${b.original_filename}</td>
+            <td><strong class="text-success">${b.imported_rows}</strong> / ${b.total_rows}</td>
+            <td>${b.duplicate_rows || 0}</td>
+            <td>${b.rejected_rows > 0 ? `<span class="badge bg-danger">${b.rejected_rows}</span>` : '0'}</td>
+            <td class="text-end fw-bold">₹${(b.total_imported_amount || 0).toLocaleString('en-IN')}</td>
+            <td class="text-center"><span class="badge bg-${b.status === 'completed' ? 'success' : 'warning text-dark'}">${b.status}</span></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } else {
+        tbody.innerHTML = '<tr><td colSpan="8" class="text-center py-4 text-muted">No import history found.</td></tr>';
+      }
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colSpan="8" class="text-center py-4 text-danger">Failed to load history.</td></tr>';
+    }
+  },
+
+  exportBulkExcel() {
+    const params = new URLSearchParams();
+    const start = document.getElementById('bulkExportStartDate')?.value;
+    const end = document.getElementById('bulkExportEndDate')?.value;
+    const cat = document.getElementById('bulkExportCategory')?.value;
+    const pay = document.getElementById('bulkExportPayment')?.value;
+
+    if (start) params.append('startDate', start);
+    if (end) params.append('endDate', end);
+    if (cat && cat !== 'all') params.append('category', cat);
+    if (pay && pay !== 'all') params.append('payment_method', pay);
+
+    ExportManager.downloadWithAuth(`/api/expenses/export/excel?${params.toString()}`, `Expense_Statement_${Date.now()}.xlsx`);
+  },
+
+  exportBulkCSV() {
+    const params = new URLSearchParams();
+    const start = document.getElementById('bulkExportStartDate')?.value;
+    const end = document.getElementById('bulkExportEndDate')?.value;
+    const cat = document.getElementById('bulkExportCategory')?.value;
+    const pay = document.getElementById('bulkExportPayment')?.value;
+
+    if (start) params.append('startDate', start);
+    if (end) params.append('endDate', end);
+    if (cat && cat !== 'all') params.append('category', cat);
+    if (pay && pay !== 'all') params.append('payment_method', pay);
+
+    ExportManager.downloadWithAuth(`/api/expenses/export/csv?${params.toString()}`, `Expense_Statement_${Date.now()}.csv`);
   }
 };

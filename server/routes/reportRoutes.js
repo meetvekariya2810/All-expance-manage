@@ -11,6 +11,7 @@ const { authMiddleware } = require('../middleware/auth');
 router.use(authMiddleware);
 
 router.get('/metrics', getSummaryMetrics);
+router.get('/summary', getSummaryMetrics);
 router.get('/export/pdf', exportPDF);
 router.get('/export/excel', exportExcel);
 router.get('/export/csv', exportCSV);

@@ -15,7 +15,9 @@ const fileFilter = (req, file, cb) => {
   if (allowedExts.includes(ext) || isExcelMime) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file format. Please upload an Excel (.xlsx, .xls) file.'), false);
+    const err = new Error('Invalid file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
+    err.status = 400;
+    cb(err, false);
   }
 };
 

@@ -309,10 +309,10 @@ export default function ExpenseListPage() {
           </button>
           <button
             className="btn btn-outline-success"
-            onClick={() => setImportModalOpen(true)}
-            title="Import Excel Expense Entries"
+            onClick={() => navigate('/bulk-import-export')}
+            title="Bulk Data Import & Export"
           >
-            <i className="fa-solid fa-file-excel me-1"></i> Import Excel
+            <i className="fa-solid fa-file-excel me-1"></i> Bulk Import / Export
           </button>
           <button className="btn btn-primary-custom" onClick={() => navigate('/expenses/new')}>
             <i className="fa-solid fa-plus me-1"></i> Add Expense

@@ -119,6 +119,11 @@
           <i class="fa-solid fa-list-check"></i>
           <span>Expense Records</span>
         </a>
+        <a class="nav-link-custom" id="nav-bulk-import-export" data-view="bulk-import-export">
+          <i class="fa-solid fa-file-excel text-success"></i>
+          <span>Bulk Import / Export</span>
+          <span class="badge bg-primary ms-auto" style="font-size: 0.62rem; padding: 0.25rem 0.45rem;">NEW</span>
+        </a>
         <a class="nav-link-custom" id="nav-funds" data-view="funds">
           <i class="fa-solid fa-vault text-success"></i>
           <span>Funds / Money In</span>
@@ -870,6 +875,265 @@
                 Showing page <span id="currentPageNum" class="fw-bold">1</span>
               </div>
               <ul class="pagination mb-0" id="expensePagination"></ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================================================================
+             VIEW: BULK DATA IMPORT & EXPORT
+             =================================================================== -->
+        <div class="view-container" id="view-bulk-import-export">
+          <div class="page-title-box mb-4">
+            <div>
+              <h3 class="fw-bold mb-1">Bulk Data Import &amp; Export</h3>
+              <p class="text-muted mb-0">Import multiple expenses from Excel or CSV and manage your expense records efficiently.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-primary btn-sm" onclick="App.switchView('expense-list')">
+                <i class="fa-solid fa-list-check me-1"></i> My Expense History
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="App.downloadExcelTemplate()">
+                <i class="fa-solid fa-download me-1"></i> Excel Template
+              </button>
+            </div>
+          </div>
+
+          <!-- 4 Summary Cards -->
+          <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+              <div class="stat-card glass-card p-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="text-muted small fw-semibold text-uppercase">Detected Rows</span>
+                  <div class="stat-icon-wrapper bg-primary-subtle text-primary p-2 rounded">
+                    <i class="fa-solid fa-table-list"></i>
+                  </div>
+                </div>
+                <h3 class="fw-bold mb-1" id="statBulkDetected">0</h3>
+                <small class="text-muted">Total rows detected</small>
+              </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+              <div class="stat-card glass-card p-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="text-muted small fw-semibold text-uppercase">Valid Rows</span>
+                  <div class="stat-icon-wrapper bg-success-subtle text-success p-2 rounded">
+                    <i class="fa-solid fa-circle-check"></i>
+                  </div>
+                </div>
+                <h3 class="fw-bold mb-1 text-success" id="statBulkValid">0</h3>
+                <small class="text-muted" id="statBulkValidAmount">₹0.00 valid</small>
+              </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+              <div class="stat-card glass-card p-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="text-muted small fw-semibold text-uppercase">Invalid Rows</span>
+                  <div class="stat-icon-wrapper bg-danger-subtle text-danger p-2 rounded">
+                    <i class="fa-solid fa-circle-xmark"></i>
+                  </div>
+                </div>
+                <h3 class="fw-bold mb-1 text-danger" id="statBulkInvalid">0</h3>
+                <small class="text-muted">Rejected validation errors</small>
+              </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+              <div class="stat-card glass-card p-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="text-muted small fw-semibold text-uppercase">Duplicate Rows</span>
+                  <div class="stat-icon-wrapper bg-warning-subtle text-warning p-2 rounded">
+                    <i class="fa-solid fa-clone"></i>
+                  </div>
+                </div>
+                <h3 class="fw-bold mb-1 text-warning" id="statBulkDuplicate">0</h3>
+                <small class="text-muted">Repeated transactions</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature Nav Tabs -->
+          <div class="glass-card mb-4 p-1">
+            <ul class="nav nav-pills nav-fill" role="tablist">
+              <li class="nav-item">
+                <button class="nav-link active py-2 fw-semibold" id="tabBulkImportBtn" onclick="App.switchBulkSubTab('import')">
+                  <i class="fa-solid fa-file-import me-2"></i> Import Expenses
+                </button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link py-2 fw-semibold" id="tabBulkExportBtn" onclick="App.switchBulkSubTab('export')">
+                  <i class="fa-solid fa-file-export me-2"></i> Export Expenses
+                </button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link py-2 fw-semibold" id="tabBulkHistoryBtn" onclick="App.switchBulkSubTab('history')">
+                  <i class="fa-solid fa-clock-rotate-left me-2"></i> Import History
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Sub-Tab 1: Import Expenses -->
+          <div id="bulkSubTabImport" class="fade show">
+            <div class="glass-card p-4 mb-4">
+              <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+                <h5 class="fw-bold mb-0">
+                  <i class="fa-solid fa-cloud-arrow-up text-primary me-2"></i> Upload Expense File
+                </h5>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-success" onclick="App.downloadExcelTemplate()">
+                    <i class="fa-solid fa-file-excel me-1"></i> Excel Template
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" onclick="App.downloadCsvTemplate()">
+                    <i class="fa-solid fa-file-csv me-1"></i> CSV Template
+                  </button>
+                </div>
+              </div>
+
+              <!-- Drag and Drop Box -->
+              <div class="dropzone-box p-4 text-center border-2 border-dashed rounded-3" id="bulkDropZone" style="cursor: pointer; background-color: rgba(255,255,255,0.02);">
+                <input type="file" id="bulkFileInput" class="d-none" accept=".xlsx, .xls, .csv" onchange="App.handleBulkFileSelect(event)">
+                <div class="my-3" onclick="document.getElementById('bulkFileInput').click()">
+                  <i class="fa-solid fa-file-excel fa-3x text-primary mb-3"></i>
+                  <h5 class="fw-bold mb-1">Drag and drop your spreadsheet here</h5>
+                  <p class="text-muted small mb-3">Supported formats: .xlsx, .xls, .csv &bull; Max size: 15 MB</p>
+                  <button type="button" class="btn btn-primary px-4 shadow-sm">
+                    <i class="fa-solid fa-folder-open me-2"></i> Browse File
+                  </button>
+                </div>
+              </div>
+
+              <!-- File Selected Info -->
+              <div id="bulkSelectedFileInfo" class="glass-card p-3 mt-3 d-none align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="p-2 bg-success-subtle text-success rounded">
+                    <i class="fa-solid fa-file-lines fa-lg"></i>
+                  </div>
+                  <div>
+                    <h6 class="fw-bold mb-0" id="bulkFileName">filename.xlsx</h6>
+                    <small class="text-muted" id="bulkFileSize">0 KB</small>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="App.clearBulkFile()">
+                  <i class="fa-solid fa-trash-can me-1"></i> Clear File
+                </button>
+              </div>
+
+              <!-- Options -->
+              <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" id="bulkSkipDuplicatesCheck" checked>
+                <label class="form-check-label fw-semibold small" for="bulkSkipDuplicatesCheck">
+                  Skip exact duplicate records (Recommended)
+                </label>
+              </div>
+
+              <!-- Action Bar -->
+              <div class="d-flex align-items-center justify-content-between mt-4 flex-wrap gap-2 pt-3 border-top">
+                <button type="button" class="btn btn-secondary-custom" onclick="App.clearBulkFile()">
+                  <i class="fa-solid fa-rotate-left me-1"></i> Start Over
+                </button>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-primary" id="btnValidateBulkFile" onclick="App.validateBulkImportFile()">
+                    <i class="fa-solid fa-magnifying-glass-chart me-1"></i> Validate File
+                  </button>
+                  <button type="button" class="btn btn-success shadow-sm" id="btnConfirmBulkImport" onclick="App.confirmBulkImport()" disabled>
+                    <i class="fa-solid fa-cloud-arrow-up me-1"></i> Import Valid Records
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Preview Card -->
+            <div id="bulkPreviewCard" class="glass-card p-4 mb-4 d-none">
+              <h5 class="fw-bold mb-3">Validation Preview &amp; Audit</h5>
+              <div class="table-responsive rounded-3 border mb-3" style="max-height: 350px;">
+                <table class="table table-sm table-hover align-middle mb-0">
+                  <thead class="table-light sticky-top">
+                    <tr>
+                      <th>#</th>
+                      <th>Date</th>
+                      <th>Title</th>
+                      <th>Category</th>
+                      <th class="text-end">Amount</th>
+                      <th>Payment</th>
+                      <th class="text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bulkPreviewTableBody"></tbody>
+                </table>
+              </div>
+              <div id="bulkErrorListContainer" class="d-none"></div>
+            </div>
+          </div>
+
+          <!-- Sub-Tab 2: Export Expenses -->
+          <div id="bulkSubTabExport" class="glass-card p-4 d-none">
+            <h5 class="fw-bold mb-3"><i class="fa-solid fa-file-export text-primary me-2"></i> Export Expense Records</h5>
+            <div class="row g-3 mb-4">
+              <div class="col-12 col-md-3">
+                <label class="form-label small fw-bold text-muted">From Date</label>
+                <input type="date" class="form-control" id="bulkExportStartDate">
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label small fw-bold text-muted">To Date</label>
+                <input type="date" class="form-control" id="bulkExportEndDate">
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label small fw-bold text-muted">Category</label>
+                <select class="form-select" id="bulkExportCategory">
+                  <option value="all">All Categories</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label small fw-bold text-muted">Payment Method</label>
+                <select class="form-select" id="bulkExportPayment">
+                  <option value="all">All Payment Methods</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Credit Card">Credit Card</option>
+                  <option value="Debit Card">Debit Card</option>
+                  <option value="Net Banking">Net Banking</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="d-flex gap-3 pt-3 border-top flex-wrap">
+              <button type="button" class="btn btn-success px-4" onclick="App.exportBulkExcel()">
+                <i class="fa-solid fa-file-excel me-2"></i> Download Excel (.xlsx)
+              </button>
+              <button type="button" class="btn btn-primary px-4" onclick="App.exportBulkCSV()">
+                <i class="fa-solid fa-file-csv me-2"></i> Download CSV (.csv)
+              </button>
+            </div>
+          </div>
+
+          <!-- Sub-Tab 3: History -->
+          <div id="bulkSubTabHistory" class="glass-card p-4 d-none">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <h5 class="fw-bold mb-0"><i class="fa-solid fa-clock-rotate-left text-primary me-2"></i> Import Batch Audits</h5>
+              <button class="btn btn-sm btn-outline-primary" onclick="App.loadBulkImportHistory()">
+                <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh
+              </button>
+            </div>
+            <div class="table-responsive rounded-3 border">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Batch ID</th>
+                    <th>Initiated By</th>
+                    <th>File</th>
+                    <th>Imported</th>
+                    <th>Duplicates</th>
+                    <th>Errors</th>
+                    <th class="text-end">Amount</th>
+                    <th class="text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="bulkHistoryTableBody">
+                  <tr><td colSpan="8" class="text-center py-4 text-muted">No history loaded.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

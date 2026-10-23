@@ -14,35 +14,35 @@
   --text-main: #0f172a;
   --text-muted: #64748b;
   --text-inverse: #ffffff;
-  
+
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
   --primary-light: rgba(37, 99, 235, 0.1);
-  
+
   --secondary: #10b981;
   --secondary-hover: #059669;
-  
+
   --accent-purple: #8b5cf6;
   --accent-amber: #f59e0b;
   --accent-rose: #f43f5e;
   --accent-cyan: #06b6d4;
-  
+
   --border-color: rgba(226, 232, 240, 0.8);
   --border-glass: rgba(255, 255, 255, 0.5);
-  
+
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
   --shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.12);
   --shadow-glow: 0 0 20px rgba(37, 99, 235, 0.25);
-  
+
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 20px;
   --radius-full: 9999px;
-  
+
   --font-heading: 'Outfit', sans-serif;
   --font-body: 'Plus Jakarta Sans', sans-serif;
-  
+
   --glass-blur: blur(16px);
   --transition-fast: all 0.2s ease;
   --transition-normal: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -57,10 +57,10 @@
   --bg-sidebar: #050811;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  
+
   --border-color: rgba(55, 65, 81, 0.6);
   --border-glass: rgba(255, 255, 255, 0.08);
-  
+
   --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 10px 35px rgba(0, 0, 0, 0.5);
 }
@@ -68,7 +68,9 @@
 /* --------------------------------------------------------------------------
    1. GLOBAL RESET & FOUNDATIONS (Prevent Horizontal Overflow Everywhere)
    -------------------------------------------------------------------------- */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -93,23 +95,35 @@ body {
   overflow-x: hidden;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
-  background-image: 
+  background-image:
     radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.08) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.06) 0px, transparent 50%);
   background-attachment: fixed;
 }
 
-img, svg, canvas, video, iframe {
+img,
+svg,
+canvas,
+video,
+iframe {
   max-width: 100%;
   height: auto;
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
   max-width: 100%;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-heading);
   font-weight: 600;
   color: var(--text-main);
@@ -209,6 +223,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   background: linear-gradient(135deg, #ffffff, #93c5fd);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -321,13 +336,16 @@ h1, h2, h3, h4, h5, h6 {
   .app-sidebar {
     transform: none !important;
   }
+
   .app-main {
     margin-left: 260px;
     width: calc(100% - 260px);
   }
+
   .sidebar-overlay {
     display: none !important;
   }
+
   .mobile-nav-toggle {
     display: none !important;
   }
@@ -340,13 +358,16 @@ h1, h2, h3, h4, h5, h6 {
     max-width: 85vw;
     transform: translateX(-100%);
   }
+
   .app-sidebar.show {
     transform: translateX(0);
   }
+
   .app-main {
     margin-left: 0 !important;
     width: 100% !important;
   }
+
   .mobile-nav-toggle {
     display: flex !important;
   }
@@ -490,8 +511,15 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Page Title Header Box */
@@ -572,13 +600,40 @@ h1, h2, h3, h4, h5, h6 {
   flex-shrink: 0;
 }
 
-.stat-icon.primary { background: rgba(37, 99, 235, 0.12); color: var(--primary); }
-.stat-icon.success { background: rgba(16, 185, 129, 0.12); color: var(--secondary); }
-.stat-icon.warning { background: rgba(245, 158, 11, 0.12); color: var(--accent-amber); }
-.stat-icon.danger { background: rgba(244, 63, 94, 0.12); color: var(--accent-rose); }
-.stat-icon.purple { background: rgba(139, 92, 246, 0.12); color: var(--accent-purple); }
-.stat-icon.info { background: rgba(6, 182, 212, 0.12); color: var(--accent-cyan); }
-.stat-icon.secondary { background: rgba(100, 116, 139, 0.12); color: var(--text-muted); }
+.stat-icon.primary {
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--primary);
+}
+
+.stat-icon.success {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--secondary);
+}
+
+.stat-icon.warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--accent-amber);
+}
+
+.stat-icon.danger {
+  background: rgba(244, 63, 94, 0.12);
+  color: var(--accent-rose);
+}
+
+.stat-icon.purple {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--accent-purple);
+}
+
+.stat-icon.info {
+  background: rgba(6, 182, 212, 0.12);
+  color: var(--accent-cyan);
+}
+
+.stat-icon.secondary {
+  background: rgba(100, 116, 139, 0.12);
+  color: var(--text-muted);
+}
 
 
 .progress-glass {
@@ -648,7 +703,8 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 6px;
 }
 
-.form-control, .form-select {
+.form-control,
+.form-select {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
@@ -660,7 +716,8 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 100%;
 }
 
-.form-control:focus, .form-select:focus {
+.form-control:focus,
+.form-select:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-light);
   background: var(--bg-secondary);
@@ -779,12 +836,35 @@ h1, h2, h3, h4, h5, h6 {
   white-space: nowrap;
 }
 
-.badge-upi { background: rgba(16, 185, 129, 0.15); color: #059669; }
-.badge-card { background: rgba(37, 99, 235, 0.15); color: #2563eb; }
-.badge-cash { background: rgba(245, 158, 11, 0.15); color: #d97706; }
-.badge-netbank { background: rgba(139, 92, 246, 0.15); color: #7c3aed; }
-.badge-admin { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
-.badge-user { background: rgba(59, 130, 246, 0.15); color: #2563eb; }
+.badge-upi {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+
+.badge-card {
+  background: rgba(37, 99, 235, 0.15);
+  color: #2563eb;
+}
+
+.badge-cash {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.badge-netbank {
+  background: rgba(139, 92, 246, 0.15);
+  color: #7c3aed;
+}
+
+.badge-admin {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+.badge-user {
+  background: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+}
 
 /* Image Receipt Modal */
 .receipt-preview-img {
@@ -831,6 +911,7 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
   }
+
   .charts-grid {
     grid-template-columns: 1fr;
     gap: 16px;
@@ -860,7 +941,7 @@ h1, h2, h3, h4, h5, h6 {
     gap: 12px;
   }
 
-  .page-title-box > div:nth-child(2),
+  .page-title-box>div:nth-child(2),
   .page-title-box .btn,
   .page-title-box .d-flex {
     width: 100%;
@@ -896,8 +977,9 @@ h1, h2, h3, h4, h5, h6 {
   .table-custom {
     min-width: 540px;
   }
-  
-  .table-custom th, .table-custom td {
+
+  .table-custom th,
+  .table-custom td {
     padding: 10px;
     font-size: 0.82rem;
   }
@@ -941,15 +1023,45 @@ h1, h2, h3, h4, h5, h6 {
   text-transform: uppercase;
 }
 
-.badge-upi { background: rgba(37, 99, 235, 0.12); color: #2563eb; }
-.badge-cash { background: rgba(16, 185, 129, 0.12); color: #059669; }
-.badge-creditcard { background: rgba(245, 158, 11, 0.12); color: #d97706; }
-.badge-debitcard { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
-.badge-netbanking { background: rgba(6, 182, 212, 0.12); color: #0891b2; }
-.badge-other { background: rgba(100, 116, 139, 0.12); color: #475569; }
+.badge-upi {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+}
 
-.badge-admin { background: rgba(37, 99, 235, 0.15); color: #1d4ed8; }
-.badge-user { background: rgba(16, 185, 129, 0.15); color: #047857; }
+.badge-cash {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+
+.badge-creditcard {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.badge-debitcard {
+  background: rgba(139, 92, 246, 0.12);
+  color: #7c3aed;
+}
+
+.badge-netbanking {
+  background: rgba(6, 182, 212, 0.12);
+  color: #0891b2;
+}
+
+.badge-other {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+.badge-admin {
+  background: rgba(37, 99, 235, 0.15);
+  color: #1d4ed8;
+}
+
+.badge-user {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
 
 .receipt-preview-img {
   max-width: 100%;
@@ -985,5 +1097,3 @@ h1, h2, h3, h4, h5, h6 {
   filter: brightness(1.1);
   transform: translateY(-1px);
 }
-
-

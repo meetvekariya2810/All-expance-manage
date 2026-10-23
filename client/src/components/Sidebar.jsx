@@ -69,6 +69,16 @@ export default function Sidebar({ isMobileOpen, closeMobileMenu }) {
           </NavLink>
 
           <NavLink
+            to="/bulk-import-export"
+            className={({ isActive }) => `nav-link-custom ${isActive ? 'active' : ''}`}
+            onClick={closeMobileMenu}
+          >
+            <i className="fa-solid fa-file-excel" style={{ color: '#10b981' }}></i>
+            <span>Bulk Data Import / Export</span>
+            <span className="badge bg-primary ms-auto" style={{ fontSize: '0.62rem', padding: '0.25rem 0.45rem' }}>NEW</span>
+          </NavLink>
+
+          <NavLink
             to="/funds"
             className={({ isActive }) => `nav-link-custom ${isActive ? 'active' : ''}`}
             onClick={closeMobileMenu}

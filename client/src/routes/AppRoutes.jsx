@@ -16,6 +16,7 @@ import ActivityPage from '../pages/ActivityPage';
 import ExpenseMonitoringPage from '../pages/ExpenseMonitoringPage';
 import FundListPage from '../pages/FundListPage';
 import SettlementPage from '../pages/SettlementPage';
+import BulkImportExportPage from '../pages/BulkImportExportPage';
 
 // Component to protect all Private/Dashboard routes
 const ProtectedRoute = ({ children }) => {
@@ -69,6 +70,7 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="expenses" element={<ExpenseListPage />} />
+        <Route path="bulk-import-export" element={<BulkImportExportPage />} />
         <Route path="expenses/new" element={<ExpenseEntryPage />} />
         <Route path="expenses/edit/:id" element={<ExpenseEntryPage />} />
         <Route path="funds" element={<FundListPage />} />
