@@ -17,6 +17,7 @@ const reportRoutes = require('./routes/reportRoutes');
 const activityRoutes = require('./routes/activityRoutes');
 const fundRoutes = require('./routes/fundRoutes');
 const settlementRoutes = require('./routes/settlementRoutes');
+const searchRoutes = require('./routes/searchRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -105,6 +106,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/funds', fundRoutes);
 app.use('/api/settlements', settlementRoutes);
+app.use('/api/search', searchRoutes);
 
 // Static uploads directory for receipts
 const serverUploadsDir = path.join(__dirname, 'uploads');

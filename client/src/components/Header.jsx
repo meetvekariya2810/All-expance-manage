@@ -2,21 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import GlobalSearch from './GlobalSearch';
 
 export default function Header({ toggleMobileMenu }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [searchQuery, setSearchQuery] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('Oct 2026');
   const navigate = useNavigate();
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/expenses?search=${encodeURIComponent(searchQuery.trim())}`);
-    }
-  };
 
   const handleRefresh = () => {
     window.dispatchEvent(new Event('app:refresh'));
@@ -27,7 +20,7 @@ export default function Header({ toggleMobileMenu }) {
   return (
     <header className="app-header d-flex align-items-center justify-content-between px-3 py-2" style={{ background: 'var(--header-bg, #ffffff)', borderBottom: '1px solid var(--border-color, #e2e8f0)', minHeight: '64px' }}>
       {/* Left: Mobile Nav Toggle & Quick Search */}
-      <div className="d-flex align-items-center gap-3 flex-grow-1" style={{ maxWidth: '420px' }}>
+      <div className="d-flex align-items-center gap-3 flex-grow-1" style={{ maxWidth: '460px' }}>
         <button
           className="mobile-nav-toggle"
           id="mobileNavToggleBtn"
@@ -37,30 +30,7 @@ export default function Header({ toggleMobileMenu }) {
           <i className="fa-solid fa-bars"></i>
         </button>
 
-        <form className="w-100 position-relative" onSubmit={handleSearchSubmit}>
-          <i
-            className="fa-solid fa-magnifying-glass position-absolute"
-            style={{ left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.85rem' }}
-          ></i>
-          <input
-            type="text"
-            id="globalQuickSearch"
-            className="form-control"
-            placeholder="Quick search transactions, categories..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              borderRadius: '9999px',
-              paddingLeft: '38px',
-              paddingRight: '14px',
-              fontSize: '0.85rem',
-              height: '38px',
-              background: 'var(--search-bg, #ffffff)',
-              borderColor: 'var(--border-color, #e2e8f0)',
-              color: 'var(--text-main, #0f172a)'
-            }}
-          />
-        </form>
+        <GlobalSearch />
       </div>
 
       {/* Right Controls matching Screenshot */}
