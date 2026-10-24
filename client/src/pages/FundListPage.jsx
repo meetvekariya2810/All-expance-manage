@@ -134,19 +134,19 @@ export default function FundListPage() {
         <div className="row g-2 align-items-center">
           <div className="col-12 col-md-5">
             <div className="input-group">
-              <span className="input-group-text border-0" style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#94a3b8' }}>
+              <span className="input-group-text" style={{ background: 'var(--hover-bg, #f1f5f9)', color: 'var(--text-muted, #64748b)', borderColor: 'var(--border-color, #cbd5e1)' }}>
                 <i className="fa-solid fa-search"></i>
               </span>
               <input
                 type="text"
-                className="form-control border-0"
+                className="form-control"
                 placeholder="Search by Fund ID, Person, Notes, Creator..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#f8fafc' }}
+                style={{ background: 'var(--card-bg, #ffffff)', color: 'var(--text-main, #0f172a)', borderColor: 'var(--border-color, #cbd5e1)' }}
               />
               {searchTerm && (
-                <button className="btn border-0" style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#94a3b8' }} onClick={() => setSearchTerm('')}>
+                <button className="btn btn-outline-secondary" style={{ borderColor: 'var(--border-color, #cbd5e1)' }} onClick={() => setSearchTerm('')}>
                   <i className="fa-solid fa-xmark"></i>
                 </button>
               )}
@@ -156,24 +156,24 @@ export default function FundListPage() {
           <div className="col-6 col-md-3">
             <input
               type="date"
-              className="form-control border-0"
+              className="form-control"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               placeholder="From Date"
               title="From Date"
-              style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#f8fafc' }}
+              style={{ background: 'var(--card-bg, #ffffff)', color: 'var(--text-main, #0f172a)', borderColor: 'var(--border-color, #cbd5e1)' }}
             />
           </div>
 
           <div className="col-6 col-md-3">
             <input
               type="date"
-              className="form-control border-0"
+              className="form-control"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               placeholder="To Date"
               title="To Date"
-              style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#f8fafc' }}
+              style={{ background: 'var(--card-bg, #ffffff)', color: 'var(--text-main, #0f172a)', borderColor: 'var(--border-color, #cbd5e1)' }}
             />
           </div>
 
@@ -197,8 +197,8 @@ export default function FundListPage() {
       {/* Funds Table / Card List */}
       <div className="glass-card overflow-hidden">
         <div className="table-responsive">
-          <table className="table table-hover align-middle mb-0" style={{ color: '#f8fafc' }}>
-            <thead style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <table className="table table-hover align-middle mb-0" style={{ color: 'var(--text-main, #0f172a)' }}>
+            <thead style={{ background: 'var(--hover-bg, #f8fafc)', color: 'var(--text-muted, #64748b)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
               <tr>
                 <th className="py-3 px-4">Fund ID</th>
                 <th className="py-3">Person</th>
@@ -221,11 +221,11 @@ export default function FundListPage() {
               ) : funds.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="text-center py-5 text-muted">
-                    <div className="mb-2" style={{ fontSize: '2rem', color: '#64748b' }}>
+                    <div className="mb-2" style={{ fontSize: '2rem', color: 'var(--text-muted, #64748b)' }}>
                       <i className="fa-solid fa-receipt"></i>
                     </div>
                     <h6>No fund records found</h6>
-                    <p className="small mb-3" style={{ color: '#94a3b8' }}>Click "+ Add Fund" to record incoming funds.</p>
+                    <p className="small mb-3" style={{ color: 'var(--text-muted, #64748b)' }}>Click "+ Add Fund" to record incoming funds.</p>
                     <button className="btn btn-sm btn-success-custom" onClick={handleOpenNew}>
                       + Add First Fund
                     </button>
@@ -233,26 +233,26 @@ export default function FundListPage() {
                 </tr>
               ) : (
                 funds.map((f) => (
-                  <tr key={f._id || f.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                    <td className="py-3 px-4 fw-semibold" style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+                  <tr key={f._id || f.id} style={{ borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
+                    <td className="py-3 px-4 fw-semibold" style={{ color: 'var(--text-muted, #64748b)', fontSize: '0.85rem' }}>
                       {f.fund_id || f.id}
                     </td>
                     <td className="py-3">
-                      <div className="fw-semibold text-white">{f.person_name}</div>
+                      <div className="fw-semibold" style={{ color: 'var(--text-main, #0f172a)' }}>{f.person_name}</div>
                     </td>
-                    <td className="py-3" style={{ fontSize: '0.875rem', color: '#cbd5e1' }}>
+                    <td className="py-3" style={{ fontSize: '0.875rem', color: 'var(--text-main, #334155)' }}>
                       {formatDate(f.fund_date)}
                     </td>
                     <td className="py-3">
-                      <span className="badge py-2 px-3 rounded-pill" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', fontSize: '0.9rem', fontWeight: '700' }}>
+                      <span className="badge py-2 px-3 rounded-pill" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#059669', fontSize: '0.9rem', fontWeight: '700' }}>
                         +{formatINR(f.amount)}
                       </span>
                     </td>
-                    <td className="py-3" style={{ maxWidth: '240px', fontSize: '0.875rem', color: '#94a3b8' }}>
+                    <td className="py-3" style={{ maxWidth: '240px', fontSize: '0.875rem', color: 'var(--text-muted, #64748b)' }}>
                       {f.notes || <span className="text-muted fst-italic">None</span>}
                     </td>
-                    <td className="py-3" style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
-                      <i className="fa-solid fa-user-circle me-1 text-muted"></i>
+                    <td className="py-3" style={{ fontSize: '0.85rem', color: 'var(--text-main, #334155)' }}>
+                      <i className="fa-solid fa-user-circle me-1 text-primary"></i>
                       {f.created_by || f.user_name || 'Admin'}
                     </td>
                     <td className="py-3 px-4 text-end">
@@ -261,7 +261,7 @@ export default function FundListPage() {
                           className="btn btn-outline-secondary border-0"
                           title="Edit Fund"
                           onClick={() => handleOpenEdit(f)}
-                          style={{ color: '#94a3b8' }}
+                          style={{ color: 'var(--text-muted, #64748b)' }}
                         >
                           <i className="fa-solid fa-pen-to-square"></i>
                         </button>

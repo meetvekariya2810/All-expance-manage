@@ -192,7 +192,7 @@ export default function SettlementPage() {
       {/* Person-wise Ledger Breakdown */}
       {personBreakdown.length > 0 && (
         <div className="mb-4">
-          <h5 className="fw-bold mb-3 d-flex align-items-center gap-2" style={{ color: '#f8fafc' }}>
+          <h5 className="fw-bold mb-3 d-flex align-items-center gap-2" style={{ color: 'var(--text-main, #0f172a)' }}>
             <i className="fa-solid fa-users text-primary"></i>
             <span>Person-Wise Settlement Ledger</span>
           </h5>
@@ -202,10 +202,10 @@ export default function SettlementPage() {
                 <div className="glass-card p-3 h-100">
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <div className="d-flex align-items-center gap-2">
-                      <div className="rounded-circle d-flex align-items-center justify-content-center" style={{ width: '36px', height: '36px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', fontWeight: 'bold' }}>
+                      <div className="rounded-circle d-flex align-items-center justify-content-center" style={{ width: '36px', height: '36px', background: 'rgba(99, 102, 241, 0.15)', color: '#4f46e5', fontWeight: 'bold' }}>
                         {p.person_name.charAt(0).toUpperCase()}
                       </div>
-                      <h6 className="mb-0 fw-bold text-white">{p.person_name}</h6>
+                      <h6 className="mb-0 fw-bold" style={{ color: 'var(--text-main, #0f172a)' }}>{p.person_name}</h6>
                     </div>
                     {p.pendingCount > 0 ? (
                       <span className="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill">
@@ -218,7 +218,7 @@ export default function SettlementPage() {
                     )}
                   </div>
 
-                  <div className="p-2 rounded mt-2" style={{ background: 'rgba(15, 23, 42, 0.4)', fontSize: '0.85rem' }}>
+                  <div className="p-2 rounded mt-2" style={{ background: 'var(--hover-bg, #f8fafc)', border: '1px solid var(--border-color, #e2e8f0)', fontSize: '0.85rem' }}>
                     <div className="d-flex justify-content-between py-1">
                       <span className="text-muted">Total Received:</span>
                       <span className="fw-semibold text-success">+{formatINR(p.totalReceived)}</span>
@@ -227,8 +227,8 @@ export default function SettlementPage() {
                       <span className="text-muted">Total Paid:</span>
                       <span className="fw-semibold text-danger">-{formatINR(p.totalPaid)}</span>
                     </div>
-                    <div className="d-flex justify-content-between py-1 border-top" style={{ borderColor: 'rgba(255, 255, 255, 0.1) !important' }}>
-                      <span className="fw-bold text-white">Net Position:</span>
+                    <div className="d-flex justify-content-between py-1 border-top" style={{ borderColor: 'var(--border-color, #e2e8f0)' }}>
+                      <span className="fw-bold" style={{ color: 'var(--text-main, #0f172a)' }}>Net Position:</span>
                       <span className={`fw-bold ${p.net >= 0 ? 'text-primary' : 'text-danger'}`}>
                         {p.net >= 0 ? `+${formatINR(p.net)}` : formatINR(p.net)}
                       </span>
@@ -246,19 +246,19 @@ export default function SettlementPage() {
         <div className="row g-2 align-items-center">
           <div className="col-12 col-md-5">
             <div className="input-group">
-              <span className="input-group-text border-0" style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#94a3b8' }}>
+              <span className="input-group-text" style={{ background: 'var(--hover-bg, #f1f5f9)', color: 'var(--text-muted, #64748b)', borderColor: 'var(--border-color, #cbd5e1)' }}>
                 <i className="fa-solid fa-search"></i>
               </span>
               <input
                 type="text"
-                className="form-control border-0"
+                className="form-control"
                 placeholder="Search settlements by Person, ID, notes..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#f8fafc' }}
+                style={{ background: 'var(--card-bg, #ffffff)', color: 'var(--text-main, #0f172a)', borderColor: 'var(--border-color, #cbd5e1)' }}
               />
               {searchTerm && (
-                <button className="btn border-0" style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#94a3b8' }} onClick={() => setSearchTerm('')}>
+                <button className="btn btn-outline-secondary" style={{ borderColor: 'var(--border-color, #cbd5e1)' }} onClick={() => setSearchTerm('')}>
                   <i className="fa-solid fa-xmark"></i>
                 </button>
               )}
@@ -267,10 +267,10 @@ export default function SettlementPage() {
 
           <div className="col-6 col-md-3">
             <select
-              className="form-select border-0"
+              className="form-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#f8fafc' }}
+              style={{ background: 'var(--card-bg, #ffffff)', color: 'var(--text-main, #0f172a)', borderColor: 'var(--border-color, #cbd5e1)' }}
             >
               <option value="all">All Statuses</option>
               <option value="Settled">Settled</option>
@@ -280,10 +280,10 @@ export default function SettlementPage() {
 
           <div className="col-6 col-md-3">
             <select
-              className="form-select border-0"
+              className="form-select"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#f8fafc' }}
+              style={{ background: 'var(--card-bg, #ffffff)', color: 'var(--text-main, #0f172a)', borderColor: 'var(--border-color, #cbd5e1)' }}
             >
               <option value="all">All Types</option>
               <option value="Paid">Paid (Money Out)</option>
@@ -310,8 +310,8 @@ export default function SettlementPage() {
       {/* Settlements List Table */}
       <div className="glass-card overflow-hidden">
         <div className="table-responsive">
-          <table className="table table-hover align-middle mb-0" style={{ color: '#f8fafc' }}>
-            <thead style={{ background: 'rgba(15, 23, 42, 0.6)', color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <table className="table table-hover align-middle mb-0" style={{ color: 'var(--text-main, #0f172a)' }}>
+            <thead style={{ background: 'var(--hover-bg, #f8fafc)', color: 'var(--text-muted, #64748b)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
               <tr>
                 <th className="py-3 px-4">Settlement ID</th>
                 <th className="py-3">Person</th>
@@ -335,11 +335,11 @@ export default function SettlementPage() {
               ) : settlements.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="text-center py-5 text-muted">
-                    <div className="mb-2" style={{ fontSize: '2rem', color: '#64748b' }}>
+                    <div className="mb-2" style={{ fontSize: '2rem', color: 'var(--text-muted, #64748b)' }}>
                       <i className="fa-solid fa-handshake-simple"></i>
                     </div>
                     <h6>No settlement records found</h6>
-                    <p className="small mb-3" style={{ color: '#94a3b8' }}>Click "+ New Settlement" to record a settlement.</p>
+                    <p className="small mb-3" style={{ color: 'var(--text-muted, #64748b)' }}>Click "+ New Settlement" to record a settlement.</p>
                     <button className="btn btn-sm btn-primary-custom" onClick={handleOpenNew}>
                       + New Settlement
                     </button>
@@ -347,22 +347,22 @@ export default function SettlementPage() {
                 </tr>
               ) : (
                 settlements.map((s) => (
-                  <tr key={s._id || s.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                    <td className="py-3 px-4 fw-semibold" style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+                  <tr key={s._id || s.id} style={{ borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
+                    <td className="py-3 px-4 fw-semibold" style={{ color: 'var(--text-muted, #64748b)', fontSize: '0.85rem' }}>
                       {s.settlement_id || s.id}
                     </td>
                     <td className="py-3">
-                      <div className="fw-semibold text-white">{s.person_name}</div>
+                      <div className="fw-semibold" style={{ color: 'var(--text-main, #0f172a)' }}>{s.person_name}</div>
                     </td>
                     <td className="py-3">
                       <span className={`badge py-1 px-2 rounded-pill ${s.settlement_type === 'Paid' ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success'}`}>
                         {s.settlement_type === 'Paid' ? 'Paid (Out)' : 'Received (In)'}
                       </span>
                     </td>
-                    <td className="py-3 fw-bold" style={{ fontSize: '0.95rem', color: s.settlement_type === 'Paid' ? '#f87171' : '#34d399' }}>
+                    <td className="py-3 fw-bold" style={{ fontSize: '0.95rem', color: s.settlement_type === 'Paid' ? '#dc2626' : '#16a34a' }}>
                       {s.settlement_type === 'Paid' ? `-${formatINR(s.amount)}` : `+${formatINR(s.amount)}`}
                     </td>
-                    <td className="py-3" style={{ fontSize: '0.875rem', color: '#cbd5e1' }}>
+                    <td className="py-3" style={{ fontSize: '0.875rem', color: 'var(--text-main, #334155)' }}>
                       {formatDate(s.settlement_date)}
                     </td>
                     <td className="py-3">
@@ -376,7 +376,7 @@ export default function SettlementPage() {
                         {s.status}
                       </button>
                     </td>
-                    <td className="py-3" style={{ maxWidth: '200px', fontSize: '0.85rem', color: '#94a3b8' }}>
+                    <td className="py-3" style={{ maxWidth: '200px', fontSize: '0.85rem', color: 'var(--text-muted, #64748b)' }}>
                       {s.notes || <span className="text-muted fst-italic">None</span>}
                     </td>
                     <td className="py-3 px-4 text-end">
@@ -385,7 +385,7 @@ export default function SettlementPage() {
                           className="btn btn-outline-secondary border-0"
                           title="Edit Settlement"
                           onClick={() => handleOpenEdit(s)}
-                          style={{ color: '#94a3b8' }}
+                          style={{ color: 'var(--text-muted, #64748b)' }}
                         >
                           <i className="fa-solid fa-pen-to-square"></i>
                         </button>
