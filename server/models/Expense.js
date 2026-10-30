@@ -11,6 +11,11 @@ const expenseSchema = new mongoose.Schema({
   description: { type: String, default: '', trim: true },
   category: { type: String, required: true, index: true, trim: true },
   amount: { type: Number, required: true, min: 0.01 },
+  transaction_type: { 
+    type: String, 
+    enum: ['Debit', 'Credit'], 
+    default: 'Debit' 
+  },
   payment_method: { 
     type: String, 
     enum: ['Cash', 'UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Other'],

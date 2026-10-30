@@ -560,7 +560,14 @@ export default function ExpenseListPage() {
                         <small className="text-muted">{item.expense_time || '12:00'}</small>
                       </td>
                       <td>
-                        <div className="fw-bold">{item.title}</div>
+                        <div className="d-flex align-items-center gap-1 flex-wrap">
+                          {item.transaction_type === 'Credit' ? (
+                            <span className="badge bg-success-subtle text-success border border-success-subtle px-1 py-0" style={{ fontSize: '0.68rem', fontWeight: '600' }}>Credit</span>
+                          ) : item.transaction_type === 'Debit' ? (
+                            <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-1 py-0" style={{ fontSize: '0.68rem', fontWeight: '600' }}>Debit</span>
+                          ) : null}
+                          <span className="fw-bold">{item.title}</span>
+                        </div>
                         {item.vendor && (
                           <small className="text-muted">
                             <i className="fa-solid fa-store me-1"></i>
@@ -578,8 +585,8 @@ export default function ExpenseListPage() {
                           {item.category}
                         </span>
                       </td>
-                      <td className="text-end fw-bold text-primary">
-                        {formatINR(item.amount)}
+                      <td className={`text-end fw-bold ${item.transaction_type === 'Credit' ? 'text-success' : 'text-primary'}`}>
+                        {item.transaction_type === 'Credit' ? `+${formatINR(item.amount)}` : formatINR(item.amount)}
                       </td>
                       <td>
                         <span className="small text-muted">{item.payment_method}</span>

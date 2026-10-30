@@ -37,9 +37,16 @@ export default function ExpenseDetailsModal({
             <div className="row g-3">
               <div className="col-sm-6">
                 <div className="glass-card p-3 h-100">
-                  <span className="text-muted small d-block">Transaction Amount</span>
-                  <h3 className="text-primary fw-bold mb-0 mt-1">
-                    {formatINR(expense.amount)}
+                  <div className="d-flex align-items-center justify-content-between">
+                    <span className="text-muted small">Transaction Amount</span>
+                    {expense.transaction_type && (
+                      <span className={`badge ${expense.transaction_type === 'Credit' ? 'bg-success' : 'bg-danger'}`}>
+                        {expense.transaction_type}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className={`${expense.transaction_type === 'Credit' ? 'text-success' : 'text-primary'} fw-bold mb-0 mt-1`}>
+                    {expense.transaction_type === 'Credit' ? `+${formatINR(expense.amount)}` : formatINR(expense.amount)}
                   </h3>
                 </div>
               </div>

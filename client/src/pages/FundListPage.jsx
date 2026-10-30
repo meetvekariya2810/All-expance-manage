@@ -27,7 +27,7 @@ export default function FundListPage() {
   const fetchFunds = useCallback(async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { limit: 100 };
       if (searchTerm.trim()) params.search = searchTerm.trim();
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
