@@ -30,6 +30,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Handle favicon explicitly with 204 No Content
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // Database connection assurance middleware for API routes
 app.use('/api', async (req, res, next) => {
   if (req.path === '/health') return next();

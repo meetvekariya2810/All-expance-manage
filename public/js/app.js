@@ -56,6 +56,14 @@ const App = {
     }
   },
 
+  async quickDirectLogin(username, password) {
+    const userField = document.getElementById('loginScreenUsername');
+    const passField = document.getElementById('loginScreenPassword');
+    if (userField) userField.value = username;
+    if (passField) passField.value = password;
+    await this.submitStandaloneLogin();
+  },
+
   async submitStandaloneLogin() {
     const u = document.getElementById('loginScreenUsername')?.value?.trim();
     const p = document.getElementById('loginScreenPassword')?.value;

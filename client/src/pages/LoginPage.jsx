@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 export default function LoginPage() {
-  const { login, isAuthenticated, user } = useAuth();
+  const { login, logout, isAuthenticated } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -15,17 +14,19 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // If already authenticated, redirect to authorized dashboard immediately
+  // Strictly enforce login screen first: clear any old/lingering session on mount
   useEffect(() => {
-    if (isAuthenticated && user) {
-      const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from, { replace: true });
+    const hasToken = localStorage.getItem('expense_jwt_token');
+    if (hasToken || isAuthenticated) {
+      logout();
     }
-  }, [isAuthenticated, user, navigate, location]);
+  }, []); // Run once on mount
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (!username.trim() || !password) {
+    const cleanUsername = username.trim();
+
+    if (!cleanUsername || !password) {
       setError('Please enter both username and password.');
       return;
     }
@@ -34,17 +35,16 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await login(username.trim(), password);
+      const res = await login(cleanUsername, password);
       showToast(`Welcome back, ${res.user.name}!`, 'success');
       navigate('/dashboard', { replace: true });
     } catch (err) {
       const serverMsg = err.response?.data?.message;
       let displayMsg = 'Invalid username or password. Please check your credentials and try again.';
-
       if (serverMsg) {
         displayMsg = serverMsg;
       } else if (err.response?.status === 500 || err.message?.includes('500')) {
-        displayMsg = 'Server is currently initializing or busy. Please try again in a few seconds.';
+        displayMsg = 'Server is currently busy or initializing. Please try again.';
       } else if (err.response?.status === 503) {
         displayMsg = 'Database service is connecting. Please wait a moment and try again.';
       } else if (err.message && !err.message.includes('object') && !err.message.includes('status code')) {
@@ -70,32 +70,20 @@ export default function LoginPage() {
           maxWidth: '440px',
           width: '100%',
           borderRadius: '16px',
-          background: 'rgba(30, 41, 59, 0.75)',
+          background: 'rgba(30, 41, 59, 0.88)',
           backdropFilter: 'blur(16px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
           color: '#f8fafc'
         }}
       >
         <div className="card-body p-4 p-sm-5">
-          {/* Header & Logo */}
+          {/* Clean Header (No logo) */}
           <div className="text-center mb-4">
-            <div
-              className="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow"
-              style={{
-                width: '64px',
-                height: '64px',
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                color: '#fff',
-                fontSize: '1.75rem'
-              }}
-            >
-              <i className="fa-solid fa-wallet"></i>
-            </div>
             <h3
               className="fw-bold mb-1 tracking-tight"
               style={{
                 letterSpacing: '-0.025em',
-                fontSize: '1.35rem',
+                fontSize: '1.45rem',
                 color: '#f8fafc',
                 textTransform: 'uppercase'
               }}
@@ -105,7 +93,7 @@ export default function LoginPage() {
             <p
               className="text-uppercase fw-semibold mb-0"
               style={{
-                fontSize: '0.85rem',
+                fontSize: '0.82rem',
                 letterSpacing: '0.12em',
                 color: '#94a3b8'
               }}
@@ -132,7 +120,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Login Form */}
+          {/* Secure Login Form */}
           <form onSubmit={handleSubmit} noValidate>
             <div className="mb-3">
               <label
@@ -140,7 +128,7 @@ export default function LoginPage() {
                 className="form-label fw-semibold"
                 style={{ fontSize: '0.875rem', color: '#cbd5e1' }}
               >
-                Username / Login ID
+                Username / Email ID
               </label>
               <div className="input-group">
                 <span
@@ -158,7 +146,7 @@ export default function LoginPage() {
                   id="username"
                   type="text"
                   className="form-control border-0"
-                  placeholder="Enter your username or ID"
+                  placeholder="Enter your username or email"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={loading}
@@ -247,22 +235,22 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                  <span>Logging in...</span>
+                  <span>Verifying Credentials...</span>
                 </>
               ) : (
                 <>
                   <i className="fa-solid fa-right-to-bracket"></i>
-                  <span>Login</span>
+                  <span>Sign In</span>
                 </>
               )}
             </button>
           </form>
 
           {/* Secure System Footer */}
-          <div className="mt-4 pt-2 text-center">
+          <div className="mt-4 pt-3 text-center" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
             <p className="mb-0 text-muted" style={{ fontSize: '0.75rem', color: '#64748b' }}>
               <i className="fa-solid fa-shield-halved me-1 text-primary"></i>
-              Secure Encrypted Authentication
+              Secure 256-bit Encrypted Session
             </p>
           </div>
         </div>

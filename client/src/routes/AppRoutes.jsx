@@ -58,30 +58,31 @@ export default function AppRoutes() {
       {/* 1. Public Standalone Route: Clean Login Only */}
       <Route path="/login" element={<LoginPage />} />
 
-      {/* 2. Authenticated Application Routes (Guarded by ProtectedRoute) */}
+      {/* 2. Root route: ALWAYS strictly redirect to /login (no automatic bypass) */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
+
+      {/* 3. Authenticated Application Routes (Guarded by ProtectedRoute) */}
       <Route
-        path="/"
         element={
           <ProtectedRoute>
             <AppLayout />
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="expenses" element={<ExpenseListPage />} />
-        <Route path="bulk-import-export" element={<BulkImportExportPage />} />
-        <Route path="expenses/new" element={<ExpenseEntryPage />} />
-        <Route path="expenses/edit/:id" element={<ExpenseEntryPage />} />
-        <Route path="funds" element={<FundListPage />} />
-        <Route path="settlements" element={<SettlementPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="budget" element={<BudgetPage />} />
-        <Route path="activity" element={<ActivityPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/expenses" element={<ExpenseListPage />} />
+        <Route path="/bulk-import-export" element={<BulkImportExportPage />} />
+        <Route path="/expenses/new" element={<ExpenseEntryPage />} />
+        <Route path="/expenses/edit/:id" element={<ExpenseEntryPage />} />
+        <Route path="/funds" element={<FundListPage />} />
+        <Route path="/settlements" element={<SettlementPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/budget" element={<BudgetPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
 
         {/* Admin Only Routes */}
         <Route
-          path="monitoring"
+          path="/monitoring"
           element={
             <AdminRoute>
               <ExpenseMonitoringPage />
@@ -89,7 +90,7 @@ export default function AppRoutes() {
           }
         />
         <Route
-          path="categories"
+          path="/categories"
           element={
             <AdminRoute>
               <CategoryManagerPage />
@@ -97,7 +98,7 @@ export default function AppRoutes() {
           }
         />
         <Route
-          path="users"
+          path="/users"
           element={
             <AdminRoute>
               <UserManagementPage />
@@ -105,10 +106,10 @@ export default function AppRoutes() {
           }
         />
 
-        <Route path="profile" element={<ProfilePage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Route>
 
-      {/* 3. Fallback Route: Redirect unauthenticated requests to /login */}
+      {/* 4. Fallback Route: Redirect unknown requests strictly to /login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
